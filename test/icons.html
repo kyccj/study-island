@@ -1,0 +1,10 @@
+<!doctype html><meta charset="utf-8"><body style="background:#fff6e0;font:11px sans-serif;margin:8px">
+<div id="o" style="display:grid;grid-template-columns:repeat(8,1fr);gap:4px"></div>
+<script src="../data.js"></script><script src="../icons.js"></script>
+<script>
+for (const sp of [...Data.FISH, ...Data.BUGS, ...Data.FOSSILS]) {
+  const d = document.createElement('div'); d.style.textAlign = 'center';
+  d.innerHTML = `<img src="${Icons.url(sp)}" style="width:64px;height:64px;image-rendering:pixelated"><br>${sp.name} ${'★'.repeat(sp.r)}`;
+  o.appendChild(d);
+}
+</script>
