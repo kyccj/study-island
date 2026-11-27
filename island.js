@@ -164,14 +164,16 @@
   }
 
   // ───────── 주민: 집 근처를 천천히 돌아다닌다 ─────────
-  const V_HOME = { toto: [8, 16], mongsil: [11, 24], coco: [18, 17], lulu: [14, 9] };
+  const V_HOME = { toto: [8, 16], mongsil: [11, 24], coco: [18, 17], lulu: [14, 9], kongi: [5, 10], bori: [10, 8], maru: [6, 22], byeolha: [13, 15],
+    pado: [15, 10], gaegul: [20, 10], bueong: [4, 25], pengi: [12, 11], gomdol: [18, 25], nana: [9, 26], mungchi: [3, 14], podeun: [15, 25], bomi: [7, 12] };
+  const villIds = (S) => G.Core.villagersHere(S).map((v) => v.id).concat(S.island.visitor ? [S.island.visitor.id] : []);
   let vill = [];
   const vImg = {};
   function syncVillagers() {
-    const S = hooks.state(), here = G.Core.villagersHere(S).map((v) => v.id);
+    const S = hooks.state(), here = villIds(S);
     vill = vill.filter((v) => here.includes(v.id));
     for (const id of here) if (!vill.some((v) => v.id === id)) {
-      const [hx, hy] = V_HOME[id]; vill.push({ id, x: hx * T + 8, y: hy * T + 14, tx: null, ty: null, wait: Math.random() * 3, dir: 0, anim: 0 });
+      const [hx, hy] = V_HOME[id] || [10, 18]; vill.push({ id, x: hx * T + 8, y: hy * T + 14, tx: null, ty: null, wait: Math.random() * 3, dir: 0, anim: 0 });
       if (!vImg[id]) { vImg[id] = new Image(); vImg[id].src = `assets/a/vill_${id}.png`; }
     }
   }
@@ -180,7 +182,7 @@
       if (v.talk > 0) { v.talk -= dt; continue; }
       if (v.tx == null) {
         v.wait -= dt; if (v.wait > 0) continue;
-        const [hx, hy] = V_HOME[v.id];
+        const [hx, hy] = V_HOME[v.id] || [10, 18];
         for (let k = 0; k < 10; k++) { const x = hx + Math.round((Math.random() - 0.5) * 6), y = hy + Math.round((Math.random() - 0.5) * 4); if (walkable(x, y)) { v.tx = x * T + 8; v.ty = y * T + 14; break; } }
         if (v.tx == null) v.wait = 1;
         continue;
@@ -321,7 +323,8 @@
   // ───────── 오늘의 빛나는 땅 ─────────
   let spotsDate = null, spots = [];
   function digSpots(date) {
-    if (spotsDate === date + stars) return spots;
+    const ex = G.Core.extraDigSpots(hooks.state());
+    if (spotsDate === date + stars + ex) return spots;
     let h = 0; for (const ch of date) h = (h * 31 + ch.charCodeAt(0)) % 2147483647;
     let s = h || 1; const r = () => ((s = (s * 48271) % 2147483647) / 2147483647);
     const cand = [];
@@ -330,9 +333,9 @@
       cand.push([x, y]);
     }
     spots = [];
-    const n = 4 + (stars >= 2 ? 1 : 0) + (stars >= 3 ? 1 : 0); // 화석이 100종이라 하루 4~6곳
+    const n = 4 + (stars >= 2 ? 1 : 0) + (stars >= 3 ? 1 : 0) + G.Core.extraDigSpots(hooks.state()); // 화석이 100종이라 하루 4~6곳, 부엉이 있으면 +1
     while (spots.length < n && cand.length) { const i = Math.floor(r() * cand.length); spots.push(cand.splice(i, 1)[0]); }
-    spotsDate = date + stars;
+    spotsDate = date + stars + ex;
     return spots;
   }
 
@@ -441,7 +444,10 @@
     for (const [x, y] of digSpots(hooks.today())) if (tx === x && ty === y && !hooks.isDug(key(x, y))) return { type: 'dig', x, y };
     for (let i = 0; i < PLOTS.length; i++) {
       const [x, y] = PLOTS[i];
-      if (tx >= x - 1 && tx <= x + 1 && ty >= y - 2 && ty <= y) return { type: 'plot', i, stand: [x, y + 1], face: 1 };
+      // 누르는 범위는 나무 크기만큼만: 빈자리·새싹은 그 칸, 어린 나무는 위로 한 칸, 다 큰 나무는 잎까지
+      const st = G.Core.treeStage(hooks.state().island.trees[i]);
+      const hit = ['empty', 'sprout', 'sapling'].includes(st) ? tx === x && ty === y : st === 'young' ? tx === x && ty >= y - 1 && ty <= y : tx >= x - 1 && tx <= x + 1 && ty >= y - 2 && ty <= y;
+      if (hit) return { type: 'plot', i, stand: [x, y + 1], face: 1 };
     }
     for (const [b, type] of [[HOUSE, 'house'], [SHOP, 'shop'], [MUSEUM, 'museum']]) if (tx >= b.x && tx < b.x + b.w && ty >= b.y && ty < b.y + b.h) return { type, stand: b.stand, face: 1 };
     if (inRect(tx, ty, POND)) return { type: 'pond' };
@@ -605,7 +611,7 @@
     const S = hooks.state(), today = hooks.today();
     buildBlocked(S);
     placeLitter(S);
-    if (vill.length !== G.Core.villagersHere(S).length) syncVillagers();
+    if (vill.length !== villIds(S).length) syncVillagers();
     if (!P.path.length) unstick();
     const hr = new Date().getHours() + new Date().getMinutes() / 60;
     const night = hr >= 20 || hr < 5 ? 0.38 : hr >= 18 ? (hr - 18) / 2 * 0.38 : hr < 7 ? (7 - hr) / 2 * 0.38 : 0;

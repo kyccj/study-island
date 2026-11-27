@@ -226,3 +226,5 @@ body:has(#app.ov) { padding-bottom: 0; }
 .vcell { display: grid; justify-items: center; gap: 2px; font-size: 11px; }
 .vcell img { width: 40px; height: 40px; background: #ffffff14; border-radius: 10px; }
 .vcell.off { opacity: .6; }
+.vgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 8px; }
+.vgrid .vcell small { text-align: center; line-height: 1.2; font-size: 10px; }

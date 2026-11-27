@@ -54,7 +54,7 @@
   // 진행 → 저장 → 올클리어 확인 → 다시 그림
   function after(d, msgs = []) {
     msgs = msgs.concat(C.checkAllClear(S, d));
-    save(); toast(msgs); render();
+    save(); toast(msgs); render(); arrivals();
   }
 
   // ───────── 머리: 캐릭터 요약 ─────────
@@ -698,19 +698,43 @@
     mongsil: ['섬이 반짝반짝하니까 기분 좋다~ 음메!', '잡초는 내가 뽑을게. 너는 오답 노트 정리해 줘!', '깨끗한 섬, 깨끗한 책상! 오늘도 화이팅이야.'],
     coco: ['숲에서 도토리 주웠어! 너는 오늘 점수 주웠어?', '바쁘다 바빠! 근데 너만큼은 아니지, 공부하는 사람!', '열심히 모으면 언젠가 꽉 차! 도감도, 실력도!'],
     lulu: ['별이 그러는데… 오늘 너한테 좋은 일이 생긴대 ✨', '행운은 준비된 사람한테 온대. 기출 한 세트 어때?', '밤하늘처럼 차분하게. 집중하면 금방이야.'],
+    kongi: ['삐약! 나도 매일 조금씩 자라고 있어!', '씨앗은 작아도 언젠가 나무가 된대. 너처럼!'],
+    bori: ['멍! 오늘도 배달 왔어! 연속 기록 지키는 거 멋있어!', '산책 갈래? …공부 끝나고! 약속!'],
+    maru: ['대나무는 하루에 엄청 자란대. 꾸준함 최고야~', '천천히 해도 괜찮아. 멈추지만 않으면 돼.'],
+    byeolha: ['한 달을 해냈구나. 너는 진짜 반짝이는 사람이야.', '보석은 오래 눌려야 생긴대. 지금이 그때야.'],
+    pado: ['오늘 물살 좋다~ 너도 문제 술술 풀리길!', '낚시도 공부도 기다림이 반이야.'],
+    gaegul: ['개굴! 곤충은 다리가 6개, 너는 집중력이 6배!', '관찰이 중요해. 틀린 문제를 잘 관찰해 봐!'],
+    bueong: ['부엉… 옛것을 알아야 새것을 안다네. 기출이 그렇지.', '오답은 화석 같은 거야. 잘 파 보면 보물이 나와.'],
+    pengi: ['Good job! 오늘 단어는 몇 개 외웠어?', 'Practice makes perfect! 강의 하나 같이 들을까?'],
+    gomdol: ['기출을 캐고 또 캐면 금맥이 나온다구!', '힘들면 꿀 한 숟가락… 아니 과일 하나 먹고 해!'],
+    nana: ['음냐… 이 섬 공기 좋다. 여기 살고 싶을지도…', '쉬는 것도 공부야. 근데 너무 많이는 말고!'],
+    mungchi: ['볼에 코인 가득! 너도 머리에 지식 가득!', '쪼르르~ 바쁘다 바빠! 같이 힘내자!'],
+    podeun: ['이 섬 색감 너무 예쁘다~ 옷 하나 지어 줄까?', '한 땀 한 땀, 공부도 한 문제 한 문제!'],
+    bomi: ['토토 언니 따라왔어! 나무 돌보는 거 좋아해.', '가시는 있어도 마음은 말랑해. 너도 힘내!'],
   };
+  // 조건을 채운 주민이 있으면 이사 카드
+  function arrivals() {
+    const nv = C.checkArrivals(S); if (!nv.length) return;
+    save(); window.Island.syncVillagers && window.Island.syncVillagers();
+    for (const v of nv) showCard(`<div class="ribbon gold">새 주민!</div><div class="rays r4"><img class="px big-icon" src="${vIcon(v.id)}"></div>
+      <h2>${v.name}(${v.kind})가 이사 왔어요!</h2><p class="muted">🔑 ${esc(v.how)} 달성</p><p>${esc(v.role)}</p>`, 'rare4');
+  }
   function talkSheet(id) {
-    const v = C.VILLAGERS.find((x) => x.id === id), d = today(), r = C.talk(S, id, d);
+    const v = C.V_BY[id], d = today(), r = C.talk(S, id, d);
     if (r.err) return;
     const left = C.questsFor(d).filter((q) => q.required && !C.isComplete(q.id, (S.days[d] && S.days[d].q[q.id]))).map((q) => q.title);
-    const pool = LINES[id], base = pool[(Math.floor(Date.now() / 864e5) + id.length) % pool.length];
+    const pool = LINES[id] || LINES.toto, base = pool[(Math.floor(Date.now() / 864e5) + id.length) % pool.length];
     const study = left.length ? `오늘 남은 퀘스트는 <b>${left.length}개</b>야. ${esc(left[0])}부터 해 볼까?` : '오늘 퀘스트 다 했구나! 정말 대단해 🎉';
     const gift = r.again ? '<p class="muted small">오늘은 벌써 이야기했어요. 내일 또 와요!</p>'
       : `<p class="gift">🎁 선물: ${COIN}${r.coins}${r.big ? ` + 친해진 기념 ${COIN}${r.big}!` : ''}</p>`;
     save(); renderHud();
+    const visit = r.moved ? `<p class="gift">🏡 ${v.name}가 섬에 이사 오기로 했어요! 앞으로 ${esc(v.role)}</p>`
+      : r.visit != null ? `<p class="muted small">🏕️ 떠돌이 손님 · 다른 날 말 걸기 ${r.visit}/3 (채우면 이사 와요)</p>` : '';
+    if (id === 'toto' || r.moved) setTimeout(arrivals, 400);
+    if (r.moved) setTimeout(() => window.Island.syncVillagers && window.Island.syncVillagers(), 50);
     openSheet(`<div class="talk"><img src="${vIcon(id)}" class="px face"><div><h3>${v.name} <small class="muted">${v.kind}</small></h3>
       <p class="bubble">${base}<br>${study}</p></div></div>${gift}
-      <p class="muted small">❤️ 친밀도 ${r.friend} · ${v.role}</p><button class="btn primary wide" data-act="closeSheet">고마워!</button>`);
+      ${visit}<p class="muted small">❤️ 친밀도 ${r.friend}${r.visit == null ? ` · ${esc(v.role)}` : ''}</p><button class="btn primary wide" data-act="closeSheet">고마워!</button>`);
   }
 
   // ───────── 잡았을 때 카드 ─────────
@@ -745,7 +769,7 @@
   }
   function afterCatch() {
     const st = C.checkStars(S, today());
-    save(); renderHud();
+    save(); renderHud(); setTimeout(arrivals, 10);
     if (st) {
       const opened = { 2: '🏖️ 해변이 열렸어요! 바다낚시를 할 수 있어요.', 3: '🌲 숲이 열렸어요! 희귀한 곤충이 살아요.', 4: '⛰️ 동굴 구역은 곧 열려요.', 5: '🏔️ 섬 꼭대기는 곧 열려요.' }[st];
       const nv = C.VILLAGERS.find((v) => v.star === st);
@@ -803,7 +827,11 @@
       ${next ? `<p class="muted">다음 ★${st + 1}: ${esc(next.text)}</p><div class="bar xp"><i style="width:${Math.min(100, (total / next.dex) * 100)}%"></i><em>도감 ${total}/${next.dex}</em></div>
       ${st + 1 === 3 ? `<p class="small">🌿 깨끗한 섬 ${Math.min(7, C.cleanDays(S, today()))}/7일${(I.litter || []).length ? ` · 지금 잡초·쓰레기 ${I.litter.length}개` : ''}</p>` : ''}
       ${st + 1 === 4 ? `<p class="small">🛠️ 금 도구 ${Object.keys(C.TOOLS).some((t) => C.tier(S, t) >= 3) ? '있음 ✓' : '없음 (상점)'}</p>` : ''}` : '<p>최고 별점이에요!</p>'}
-      <div class="vrow">${C.VILLAGERS.map((v) => st >= v.star ? `<div class="vcell"><img src="${vIcon(v.id)}" class="px"><small>${v.name}</small></div>` : `<div class="vcell off"><img src="${vIcon(v.id)}" class="px silhouette"><small>★${v.star}</small></div>`).join('')}</div></div>`;
+</div>`;
+    const here = C.villagersHere(S).map((v) => v.id), vis = S.island.visitor;
+    html += `<div class="card"><div class="row"><h3>🏡 주민 ${here.length}/${C.VILLAGERS.length}</h3>${vis ? `<small class="muted">🏕️ ${C.V_BY[vis.id].name} 방문 중</small>` : ''}</div>
+      <div class="vgrid">${C.VILLAGERS.map((v) => here.includes(v.id) ? `<div class="vcell"><img src="${vIcon(v.id)}" class="px"><small>${v.name}</small></div>`
+        : `<div class="vcell off"><img src="${vIcon(v.id)}" class="px silhouette"><small>${esc(v.how)}</small></div>`).join('')}</div></div>`;
     const cats = [['fish', '🐟 물고기', D.FISH], ['bug', '🦋 곤충', D.BUGS], ['fossil', '🦴 화석', D.FOSSILS], ['fruit', '🍒 과일', null]];
     html += `<div class="seg dexseg">${cats.map(([k, l, list]) => `<button class="${dexCat === k ? 'on' : ''}" data-act="dexCat" data-k="${k}">${l}<small>${Object.keys(I.dex[k] || {}).length}/${list ? list.length : 6}</small></button>`).join('')}</div>`;
     const when = new Date();
@@ -874,6 +902,7 @@
     window.Island.init($('#cv'), islandHooks);
     save(); render();
     if (msgs.length) modal('📜 섬 소식', msgs);
+    arrivals();
     if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
   }
   // 새벽 4시를 넘기면 새로 정산

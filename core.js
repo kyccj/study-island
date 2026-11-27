@@ -546,24 +546,50 @@
     bag[id]--; if (!bag[id]) delete bag[id];
     return { ok: true, got: heal(S, D().BY_ID[id].hp) };
   }
-  // ───────── 주민: 별점마다 한 명씩 이사 와서 돕는다 ─────────
+  // ───────── 주민: 여러 경로로 찾아와 눌러앉는다 ─────────
+  const gichulSets = (S) => Object.values(S.gichul.done || {}).reduce((a, o) => a + Object.keys(o).length, 0);
+  const dexN = (S, c) => Object.keys(S.island.dex[c] || {}).length;
   const VILLAGERS = [
-    { id: 'toto', star: 2, name: '토토', kind: '토끼 정원사', role: '매일 아침 물 안 준 나무 2그루에 물을 줘요' },
-    { id: 'mongsil', star: 3, name: '몽실', kind: '양 청소부', role: '매일 잡초·쓰레기를 2개까지 치워요' },
-    { id: 'coco', star: 4, name: '코코', kind: '다람쥐 채집가', role: '매일 과일·씨앗·코인 중 하나를 주워 와요' },
-    { id: 'lulu', star: 5, name: '루루', kind: '별빛 고양이', role: '희귀한 걸 낚고 캘 확률이 오르고 럭키가 더 자주 나와요' },
+    { id: 'toto', name: '토토', kind: '토끼 정원사', role: '매일 아침 물 안 준 나무 2그루에 물을 줘요', how: '섬 별점 ★2', star: 2, ok: (S) => (S.island.stars || 1) >= 2 },
+    { id: 'mongsil', name: '몽실', kind: '양 청소부', role: '매일 잡초·쓰레기를 2개까지 치워요', how: '섬 별점 ★3', star: 3, ok: (S) => (S.island.stars || 1) >= 3 },
+    { id: 'coco', name: '코코', kind: '다람쥐 채집가', role: '매일 과일·씨앗·코인 중 하나를 주워 와요', how: '섬 별점 ★4', star: 4, ok: (S) => (S.island.stars || 1) >= 4 },
+    { id: 'lulu', name: '루루', kind: '별빛 고양이', role: '희귀한 걸 낚고 캘 확률이 오르고 럭키가 더 자주 나와요', how: '섬 별점 ★5', star: 5, ok: (S) => (S.island.stars || 1) >= 5 },
+    { id: 'kongi', name: '콩이', kind: '병아리', role: '매일 씨앗 1개를 가져와요', how: '올클리어 3일 연속', ok: (S) => S.player.bestStreak >= 3 },
+    { id: 'bori', name: '보리', kind: '강아지 배달부', role: '매일 코인 80개를 가져와요', how: '올클리어 7일 연속', ok: (S) => S.player.bestStreak >= 7 },
+    { id: 'maru', name: '마루', kind: '판다', role: '매일 과일 2개를 나눠 줘요', how: '올클리어 14일 연속', ok: (S) => S.player.bestStreak >= 14 },
+    { id: 'byeolha', name: '별하', kind: '여우', role: '매일 보석 1개를 찾아와요', how: '올클리어 30일 연속', ok: (S) => S.player.bestStreak >= 30 },
+    { id: 'pado', name: '파도', kind: '수달 낚시꾼', role: '매일 물고기 1마리를 나눠 줘요(가방으로)', how: '물고기 도감 25종', ok: (S) => dexN(S, 'fish') >= 25 },
+    { id: 'gaegul', name: '개굴', kind: '개구리 곤충 박사', role: '매일 곤충 1마리를 나눠 줘요(가방으로)', how: '곤충 도감 25종', ok: (S) => dexN(S, 'bug') >= 25 },
+    { id: 'bueong', name: '부엉', kind: '부엉이 고고학자', role: '빛나는 땅이 하루 1곳 더 생겨요', how: '화석 도감 25종', ok: (S) => dexN(S, 'fossil') >= 25 },
+    { id: 'pengi', name: '펭이', kind: '펭귄 영어 선생님', role: '매일 코인 100개를 장학금으로 줘요', how: 'RC 강의 15강 완주', ok: (S) => (S.lecture.next || 1) > 15 },
+    { id: 'gomdol', name: '곰돌', kind: '곰 광부', role: '매일 광석 1개를 캐 와요', how: '기출 20세트', ok: (S) => gichulSets(S) >= 20 },
+    { id: 'nana', name: '나나', kind: '코알라 캠퍼', role: '매일 과일 1개와 씨앗 1개를 줘요', how: '떠돌이 손님 (3일 말 걸기)', visitor: true },
+    { id: 'mungchi', name: '뭉치', kind: '햄스터', role: '매일 코인을 모아 와요(가끔 듬뿍)', how: '떠돌이 손님 (3일 말 걸기)', visitor: true },
+    { id: 'podeun', name: '포근', kind: '알파카 재단사', role: '가끔 옷을 지어 줘요', how: '떠돌이 손님 (3일 말 걸기)', visitor: true },
+    { id: 'bomi', name: '봄이', kind: '고슴도치 정원사', role: '토토를 도와 나무 1그루에 더 물을 줘요', how: '토토와 친밀도 10', ok: (S) => ((S.island.friend || {}).toto || 0) >= 10 },
   ];
-  const villagersHere = (S) => VILLAGERS.filter((v) => (S.island.stars || 1) >= v.star);
-  const hasV = (S, id) => villagersHere(S).some((v) => v.id === id);
-  // 하루 한 번(앱을 연 날) 주민 도움
+  const V_BY = Object.fromEntries(VILLAGERS.map((v) => [v.id, v]));
+  const residents = (S) => (S.island.residents = S.island.residents || []);
+  const villagersHere = (S) => residents(S).map((id) => V_BY[id]).filter(Boolean);
+  const hasV = (S, id) => residents(S).includes(id);
+  // 조건을 채운 주민을 이사시키고, 새로 온 주민 목록을 돌려준다
+  function checkArrivals(S) {
+    const R = residents(S), out = [];
+    for (const v of VILLAGERS) if (!v.visitor && !R.includes(v.id) && v.ok(S)) { R.push(v.id); out.push(v); }
+    return out;
+  }
+  const extraDigSpots = (S) => (hasV(S, 'bueong') ? 1 : 0);
+  // 하루 한 번(앱을 연 날) 주민 도움과 떠돌이 손님
   function villagerHelp(S, date, rng = Math.random) {
     const I = S.island; if (I.helpDate === date) return [];
     I.helpDate = date; const out = [];
-    if (hasV(S, 'toto')) {
-      const ts = I.trees.filter((t) => t && t.watered !== date && treeStage(t) !== 'fruit').slice(0, 2);
-      ts.forEach((t) => { t.watered = date; });
-      if (ts.length) out.push(`🐰 토토가 나무 ${ts.length}그루에 물을 줬어요`);
-    }
+    const kinds = Object.keys(FRUITS), rk = () => kinds[Math.floor(rng() * kinds.length)];
+    const water = (n, who) => {
+      const ts = I.trees.filter((t) => t && t.watered !== date && treeStage(t) !== 'fruit').slice(0, n);
+      ts.forEach((t) => { t.watered = date; }); if (ts.length) out.push(`${who}가 나무 ${ts.length}그루에 물을 줬어요`);
+    };
+    if (hasV(S, 'toto')) water(2, '🐰 토토');
+    if (hasV(S, 'bomi')) water(1, '🦔 봄이');
     if (hasV(S, 'mongsil')) {
       let n = 0;
       while (n < 2 && (I.newLitter || []).length) { I.newLitter.pop(); n++; }
@@ -572,10 +598,32 @@
       if (n) out.push(`🐑 몽실이 잡초·쓰레기 ${n}개를 치웠어요`);
     }
     if (hasV(S, 'coco')) {
-      const x = rng(), kinds = Object.keys(FRUITS), k = kinds[Math.floor(rng() * kinds.length)];
+      const x = rng(), k = rk();
       if (x < 0.5) { I.fruit[k] = (I.fruit[k] || 0) + 2; out.push(`🐿️ 코코가 ${FRUITS[k].name} 2개를 주워 왔어요`); }
       else if (x < 0.8) { I.seeds[k] = (I.seeds[k] || 0) + 1; out.push(`🐿️ 코코가 ${FRUITS[k].name} 씨앗을 주워 왔어요`); }
       else { S.player.coins += 150; out.push('🐿️ 코코가 코인 150개를 주워 왔어요'); }
+    }
+    const coin = (n, msg) => { S.player.coins += n; out.push(msg); };
+    if (hasV(S, 'kongi')) { const k = rk(); I.seeds[k] = (I.seeds[k] || 0) + 1; out.push(`🐥 콩이가 ${FRUITS[k].name} 씨앗을 가져왔어요`); }
+    if (hasV(S, 'bori')) coin(80, '🐶 보리가 코인 80개를 배달했어요');
+    if (hasV(S, 'maru')) { const k = rk(); I.fruit[k] = (I.fruit[k] || 0) + 2; out.push(`🐼 마루가 ${FRUITS[k].name} 2개를 나눠 줬어요`); }
+    if (hasV(S, 'byeolha')) { const g = ['ruby', 'emerald', 'amethyst', 'topaz'][Math.floor(rng() * 4)]; I.bag.ore[g] = (I.bag.ore[g] || 0) + 1; out.push(`🦊 별하가 ${D().ORES[g].name}를 찾아왔어요`); }
+    if (hasV(S, 'pado')) { const pool = D().FISH.filter((f) => f.r <= 3 && f.loc === 'pond'); const f = pool[Math.floor(rng() * pool.length)]; I.bag.fish[f.id] = (I.bag.fish[f.id] || 0) + 1; out.push(`🦦 파도가 ${f.name}를 나눠 줬어요 (가방)`); }
+    if (hasV(S, 'gaegul')) { const pool = D().BUGS.filter((b) => b.r <= 3); const b = pool[Math.floor(rng() * pool.length)]; I.bag.bug[b.id] = (I.bag.bug[b.id] || 0) + 1; out.push(`🐸 개굴이 ${b.name}를 나눠 줬어요 (가방)`); }
+    if (hasV(S, 'pengi')) coin(100, '🐧 펭이가 장학금 100코인을 줬어요');
+    if (hasV(S, 'gomdol')) { const y = rng(), o = y < 0.5 ? 'copper' : y < 0.85 ? 'silver' : 'gold'; I.bag.ore[o] = (I.bag.ore[o] || 0) + 1; out.push(`🐻 곰돌이 ${D().ORES[o].name}을 캐 왔어요`); }
+    if (hasV(S, 'nana')) { const k = rk(), k2 = rk(); I.fruit[k] = (I.fruit[k] || 0) + 1; I.seeds[k2] = (I.seeds[k2] || 0) + 1; out.push(`🐨 나나가 ${FRUITS[k].name}와 ${FRUITS[k2].name} 씨앗을 줬어요`); }
+    if (hasV(S, 'mungchi')) { const c = rng() < 0.15 ? 300 : 50; coin(c, `🐹 뭉치가 코인 ${c}개를 모아 왔어요`); }
+    if (hasV(S, 'podeun') && rng() < 0.2) {
+      const pool = []; for (const sl of ['top', 'bottom', 'hat']) for (const it of CLOTHES[sl]) if (it.price && it.id !== 'crown' && it.id !== 'gold' && !owns(S, sl, it.id)) pool.push([sl, it]);
+      if (pool.length) { const [sl, it] = pool[Math.floor(rng() * pool.length)]; wardrobe(S)[sl].push(it.id); out.push(`🦙 포근이 ${it.name}을(를) 지어 줬어요! 집 옷장을 보세요`); }
+    }
+    // 떠돌이 손님: 3일 안에 다른 날 세 번 말 걸면 눌러앉고, 5일 지나면 떠난다
+    const vis = I.visitor;
+    if (vis && (parseYmd(date) - parseYmd(vis.from)) / 864e5 >= 5) { out.push(`🏕️ ${V_BY[vis.id].name}가 섬을 떠났어요. 언젠가 또 올지도 몰라요`); I.visitor = null; }
+    if (!I.visitor) {
+      const left = VILLAGERS.filter((v) => v.visitor && !hasV(S, v.id));
+      if (left.length && rng() < 0.35) { const v = left[Math.floor(rng() * left.length)]; I.visitor = { id: v.id, from: date, talks: [] }; out.push(`🏕️ ${v.name}(${v.kind})가 섬에 놀러 왔어요! 다른 날 세 번 말을 걸면 이사 올지도 몰라요`); }
     }
     return out;
   }
@@ -583,12 +631,15 @@
   const FRIEND_GIFT = { 5: 300, 15: 800, 30: 2000 };
   function talk(S, id, date, rng = Math.random) {
     const I = S.island; I.talked = I.talked || {}; I.friend = I.friend || {};
-    if (!hasV(S, id)) return { err: '아직 없는 주민' };
-    if (I.talked[id] === date) return { ok: true, again: true, friend: I.friend[id] || 0 };
+    const vis = I.visitor && I.visitor.id === id ? I.visitor : null;
+    if (!hasV(S, id) && !vis) return { err: '아직 없는 주민' };
+    if (I.talked[id] === date) return { ok: true, again: true, friend: I.friend[id] || 0, visit: vis ? vis.talks.length : null };
     I.talked[id] = date; I.friend[id] = (I.friend[id] || 0) + 1;
     const coins = 20 + Math.floor(rng() * 5) * 10; S.player.coins += coins;
-    const big = FRIEND_GIFT[I.friend[id]] || 0; S.player.coins += big;
-    return { ok: true, coins, big, friend: I.friend[id] };
+    const big = vis ? 0 : FRIEND_GIFT[I.friend[id]] || 0; S.player.coins += big;
+    let moved = false;
+    if (vis) { if (!vis.talks.includes(date)) vis.talks.push(date); if (vis.talks.length >= 3) { residents(S).push(id); I.visitor = null; moved = true; } }
+    return { ok: true, coins, big, friend: I.friend[id], visit: vis ? vis.talks.length : null, moved };
   }
 
   // 섬 별점
@@ -616,7 +667,7 @@
     DAY_SHIFT_H, ymd, parseYmd, addDays, gameDate, weekday, weekStart, WD,
     R, maxHp, MISS_HP, CHURCH_HP, BASE_MAX_HP,
     TOOLS, TIER_NAME, TOOL_PRICE, TOOL_INFO, tier, cost, buyTool, waterAll, fleeChance, TOPS, BOTTOMS, HATS, CLOTHES, wardrobe, owns, wear, shopToday, buySeed, buyClothes,
-    addLitter, clearLitter, cleanDays, VILLAGERS, villagersHere, villagerHelp, talk, FRIEND_GIFT,
+    addLitter, clearLitter, cleanDays, VILLAGERS, V_BY, villagersHere, villagerHelp, talk, FRIEND_GIFT, checkArrivals, extraDigSpots,
     addCatch, lucky, dig, digResult, castLine, landFish, swingNet, FLEE, NET_HIT, sellItem, eatFish, dexCount, STAR_RULES, computeStars, checkStars,
     FRUITS, COST, PLOTS, GROW_DAYS, defaultIsland, treeStage, plant, water, harvest, growTrees, eat, sell, heal,
     SUBJECTS, SUBJECT_BY_WD, questsFor, isComplete, defaultState, dayRec, qRec,
