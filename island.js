@@ -224,7 +224,7 @@
       cand.push([x, y]);
     }
     spots = [];
-    const n = 3 + (stars >= 2 ? 1 : 0) + (stars >= 3 ? 1 : 0);
+    const n = 4 + (stars >= 2 ? 1 : 0) + (stars >= 3 ? 1 : 0); // 화석이 100종이라 하루 4~6곳
     while (spots.length < n && cand.length) { const i = Math.floor(r() * cand.length); spots.push(cand.splice(i, 1)[0]); }
     spotsDate = date + stars;
     return spots;
@@ -454,7 +454,7 @@
     rhino: 12, stag: 11, bigstag: 13 };
   function drawBug(b, time, night) {
     if (b.y < -100) return;
-    const c = G.Icons.canvasFor(b.sp); const s = c instanceof HTMLImageElement ? (BUG_SIZE[b.sp.id] || 11) : 11;
+    const c = G.Icons.canvasFor(b.sp); const s = c instanceof HTMLImageElement ? (BUG_SIZE[b.sp.id] || b.sp.px || 10) : 11;
     ctx.globalAlpha = b.gone ? Math.max(0, 1 - (b.t - b.goneAt) / 1.2) : 1;
     if (b.mode === 'fly' && !b.gone) { ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(b.x, b.hy + 6, 3, 1.2, 0, 0, Math.PI * 2); ctx.fill(); }
     if (b.sp.art[0] === 'firefly' && night) { const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 10); g.addColorStop(0, 'rgba(240,255,120,.7)'); g.addColorStop(1, 'rgba(240,255,120,0)'); ctx.fillStyle = g; ctx.fillRect(b.x - 10, b.y - 10, 20, 20); }

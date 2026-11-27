@@ -144,9 +144,10 @@ t('HP 부족하면 행동 못 함, 먹기·팔기', () => {
 });
 // 2단계: 낚시·곤충·화석
 const seq = (...xs) => { let i = 0; return () => xs[i++ % xs.length]; };
-t('도감 80종, 이름 중복 없음', () => {
-  assert.deepStrictEqual([D.FISH.length, D.BUGS.length, D.FOSSILS.length], [30, 30, 20]);
-  assert.strictEqual(new Set([...D.FISH, ...D.BUGS, ...D.FOSSILS].map((x) => x.name)).size, 80);
+t('도감 300종(각 100), 이름·id 중복 없음', () => {
+  assert.deepStrictEqual([D.FISH.length, D.BUGS.length, D.FOSSILS.length], [100, 100, 100]);
+  assert.strictEqual(new Set([...D.FISH, ...D.BUGS, ...D.FOSSILS].map((x) => x.name)).size, 300);
+  assert.strictEqual(new Set([...D.FISH, ...D.BUGS, ...D.FOSSILS].map((x) => x.id)).size, 300);
 });
 t('출현 시간: 밤 물고기·겨울 물고기', () => {
   const eel = D.BY_ID.eel, puffer = D.BY_ID.puffer;
@@ -180,9 +181,9 @@ t('팔기·물고기 먹기', () => {
   assert.strictEqual(C.sellItem(S, 'ore', 'gold').coins, 400); assert.strictEqual(S.player.coins, 1600);
   assert.deepStrictEqual(S.island.bag.fish, {});
 });
-t('섬 별점: 도감 10종 + 나무 3그루면 ★2', () => {
+t('섬 별점: 도감 15종 + 나무 3그루면 ★2', () => {
   const S = C.defaultState();
-  D.FISH.slice(0, 10).forEach((f) => C.addCatch(S, f, 'd'));
+  D.FISH.slice(0, 15).forEach((f) => C.addCatch(S, f, 'd'));
   assert.strictEqual(C.checkStars(S), null);
   S.island.trees[0] = S.island.trees[1] = S.island.trees[2] = { kind: 'cherry', g: 0 };
   assert.strictEqual(C.checkStars(S), 2); assert.strictEqual(C.checkStars(S), null);

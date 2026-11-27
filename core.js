@@ -445,10 +445,10 @@
   const dexCount = (S) => ['fruit', 'fish', 'bug', 'fossil'].reduce((a, c) => a + Object.keys(S.island.dex[c] || {}).length, 0);
   const STAR_RULES = [
     null, null,
-    { dex: 10, text: '도감 10종 + 과일나무 3그루', ok: (S) => S.island.trees.filter(Boolean).length >= 3 },
-    { dex: 30, text: '도감 30종 + 퀘스트 올클리어 7일 연속(최고 기록)', ok: (S) => S.player.bestStreak >= 7 },
-    { dex: 50, text: '도감 50종 + 금 도구 1개 (상점 3단계)', ok: (S) => false },
-    { dex: 70, text: '도감 70종', ok: () => true },
+    { dex: 15, text: '도감 15종 + 과일나무 3그루', ok: (S) => S.island.trees.filter(Boolean).length >= 3 },
+    { dex: 50, text: '도감 50종 + 퀘스트 올클리어 7일 연속(최고 기록)', ok: (S) => S.player.bestStreak >= 7 },
+    { dex: 110, text: '도감 110종 + 금 도구 1개 (상점 3단계)', ok: (S) => false },
+    { dex: 200, text: '도감 200종', ok: () => true },
   ];
   function computeStars(S) {
     let st = 1;

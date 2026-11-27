@@ -1,5 +1,5 @@
 // 오프라인용: 앱 파일을 캐시하고, 인터넷이 되면 새 버전으로 갈아끼운다.
-const CACHE = 'study-island-v5';
+const CACHE = 'study-island-v6';
 const SPR = ['sprout', 'sapling', 'young', 'tree', 'blossom', 'forest', 'pine', 'palm', 'bush', 'mushroom', 'flower_pink', 'flower_yellow', 'flower_white', 'flower_lilac',
   'tuft', 'stone', 'shell', 'starfish', 'weeds', 'can', 'sign', 'fence', 'post', 'lily', 'dig', 'house', 'shop', 'museum', 'player',
   ...['cherry', 'orange', 'lemon', 'pear', 'banana', 'grapes'].map((k) => 'fruit_' + k)].map((a) => `a/${a}`);
