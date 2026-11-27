@@ -112,6 +112,68 @@
     ctx.beginPath(); ctx.roundRect(x0 - 4 - k * 1.6, y0 - 4 - k * 1.6, x1 - x0 + 8 + 3.2 * k, y1 - y0 + 8 + 3.2 * k, 19 + k); ctx.stroke();
   }
 
+  // ───────── 옷 입히기: 상의·하의는 물들이고, 모자는 머리 위에 얹는다 ─────────
+  const HEAD = 16; // 모자 자리(그림 화소)
+  let dressed = null, dressKey = '', headInfo = null;
+  const hatImg = {};
+  function redress() { dressKey = ''; }
+  function rgb2h(r, g, b) { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 510, d = (mx - mn) / 255; if (!d) return [0, 0, l]; const s = d / (1 - Math.abs(2 * l - 1)); let h = mx === r ? ((g - b) / (mx - mn)) % 6 : mx === g ? (b - r) / (mx - mn) + 2 : (r - g) / (mx - mn) + 4; return [(h * 60 + 360) % 360, s, l]; }
+  const hex = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  function dressSheet(S) {
+    const o = S.island.outfit || {}, k = JSON.stringify(o) + (o.hat && hatImg[o.hat] && hatImg[o.hat].width ? 1 : 0);
+    if (dressed && k === dressKey) return dressed;
+    const src = IMG.player; if (!src || !src.width) return null;
+    const fw = src.width / 3, fh = src.height / 5, c = document.createElement('canvas'); c.width = src.width; c.height = (fh + HEAD) * 5;
+    const g = c.getContext('2d');
+    for (let r = 0; r < 5; r++) g.drawImage(src, 0, r * fh, src.width, fh, 0, r * (fh + HEAD) + HEAD, src.width, fh);
+    const top = G.Core.TOPS.find((t) => t.id === o.top), bot = G.Core.BOTTOMS.find((t) => t.id === o.bottom);
+    const im = g.getImageData(0, 0, c.width, c.height), a = im.data;
+    if (!headInfo) { // 칸마다 머리 꼭대기와 가운데
+      headInfo = [];
+      for (let r = 0; r < 5; r++) for (let col = 0; col < 3; col++) {
+        let ty = -1, sx = 0, n = 0;
+        for (let y = 0; y < fh && ty < 0; y++) for (let x = 0; x < fw; x++) if (a[((r * (fh + HEAD) + HEAD + y) * c.width + col * fw + x) * 4 + 3]) { ty = y; break; }
+        for (let y = ty; y < ty + 12; y++) for (let x = 0; x < fw; x++) if (a[((r * (fh + HEAD) + HEAD + y) * c.width + col * fw + x) * 4 + 3]) { sx += x; n++; }
+        headInfo.push({ top: ty, cx: n ? sx / n : fw / 2 });
+      }
+    }
+    if ((top && top.id !== 'basic') || (bot && bot.id !== 'basic')) {
+      const tc = top && hex(top.c), bc = bot && hex(bot.c);
+      for (let i = 0; i < a.length; i += 4) {
+        if (!a[i + 3]) continue;
+        const [h, s2, l] = rgb2h(a[i], a[i + 1], a[i + 2]);
+        let t = null, base = 0.74;
+        if (tc && top.id !== 'basic' && h >= 34 && h <= 65 && s2 > 0.45) t = tc;
+        else if (bc && bot.id !== 'basic' && h >= 70 && h <= 170 && s2 > 0.2) { t = bc; base = 0.5; }
+        if (!t) continue;
+        const kk = Math.min(1.15, l / base); a[i] = Math.min(255, t[0] * kk); a[i + 1] = Math.min(255, t[1] * kk); a[i + 2] = Math.min(255, t[2] * kk);
+      }
+      g.putImageData(im, 0, 0);
+    }
+    if (o.hat) {
+      if (!hatImg[o.hat]) { hatImg[o.hat] = new Image(); hatImg[o.hat].onload = () => { dressKey = ''; }; hatImg[o.hat].src = `assets/a/hatw_${o.hat}.png`; }
+      const hi = hatImg[o.hat];
+      if (hi.width) for (let r = 0; r < 5; r++) for (let col = 0; col < 3; col++) {
+        const info = headInfo[r * 3 + col], view = r === 1 ? 2 : r === 2 || r === 3 ? 1 : 0, flip = r === 3;
+        const bx = col * fw + info.cx, by = r * (fh + HEAD) + HEAD + info.top + 11;
+        g.save(); g.translate(Math.round(bx), 0); if (flip) g.scale(-1, 1);
+        g.drawImage(hi, view * 40, 0, 40, 40, -20, by - 40, 40, 40); g.restore();
+      }
+    }
+    dressed = c; dressKey = k; return c;
+  }
+
+  // ───────── 잡초·쓰레기 ─────────
+  function placeLitter(S) {
+    const I = S.island; if (!I.newLitter || !I.newLitter.length) return;
+    I.litter = I.litter || [];
+    const used = new Set(I.litter.map((l) => key(l.x, l.y))); deco.forEach((d) => used.add(key(d.x, d.y)));
+    const cand = [];
+    for (let y = 6; y <= 31; y++) for (let x = 2; x <= 21; x++) if (walkable(x, y) && !used.has(key(x, y)) && !PLOTS.some(([px, py]) => Math.abs(px - x) <= 1 && y >= py - 1 && y <= py + 1)) cand.push([x, y]);
+    for (const k of I.newLitter) { if (!cand.length) break; const [x, y] = cand.splice(Math.floor(Math.random() * cand.length), 1)[0]; I.litter.push({ k, x, y }); }
+    I.newLitter = []; hooks.save();
+  }
+
   let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const DECO_KINDS = ['flower_pink', 'flower_yellow', 'flower_white', 'flower_lilac', 'tuft', 'tuft', 'tuft', 'bush', 'mushroom', 'stone'];
   const deco = [];
@@ -329,6 +391,8 @@
   function objectAt(wx, wy) {
     const tx = Math.floor(wx / T), ty = Math.floor(wy / T);
     for (const b of bugs) if (!b.gone && Math.hypot(b.x - wx, b.y - wy) < 11) return { type: 'bug', bug: b };
+    const lit = hooks.state().island.litter || [];
+    for (let i = 0; i < lit.length; i++) if (lit[i].x === tx && lit[i].y === ty) return { type: 'litter', idx: i, x: tx, y: ty };
     for (const [x, y] of digSpots(hooks.today())) if (tx === x && ty === y && !hooks.isDug(key(x, y))) return { type: 'dig', x, y };
     for (let i = 0; i < PLOTS.length; i++) {
       const [x, y] = PLOTS[i];
@@ -373,6 +437,14 @@
       const st = walkable(bt[0], bt[1]) && Math.hypot(bt[0] * T + 8 - b.x, bt[1] * T + 8 - b.y) < 14 ? bt : besideTile(bt[0], bt[1]) || bt;
       addRing(b.x, b.y, '#ffe680');
       if (!walkThen(st, () => swing(b), b)) hooks.toast('거기엔 갈 수 없어요');
+      return;
+    }
+    if (obj && obj.type === 'litter') {
+      const it = hooks.state().island.litter[obj.idx];
+      const st = walkable(obj.x, obj.y) ? besideTile(obj.x, obj.y) || [obj.x, obj.y] : besideTile(obj.x, obj.y); if (!st) return;
+      addRing(obj.x * T + 8, obj.y * T + 8, '#c8ffb0');
+      walkThen(st, () => { faceTo(obj.x * T + 8, obj.y * T + 8); P.act = 0.4; P.actKind = 2; dustAt(obj.x * T + 8, obj.y * T + 12);
+        const i = hooks.state().island.litter.indexOf(it); if (i >= 0) hooks.clearLitter(i, obj.x * T + 8, obj.y * T + 8); });
       return;
     }
     if (obj && obj.type === 'dig') {
@@ -480,6 +552,7 @@
     const time = ts / 1000, dt = Math.min(0.05, (ts - (t0 || ts)) / 1000); t0 = ts; now = time;
     const S = hooks.state(), today = hooks.today();
     buildBlocked(S);
+    placeLitter(S);
     if (!P.path.length) unstick();
     const hr = new Date().getHours() + new Date().getMinutes() / 60;
     const night = hr >= 20 || hr < 5 ? 0.38 : hr >= 18 ? (hr - 18) / 2 * 0.38 : hr < 7 ? (7 - hr) / 2 * 0.38 : 0;
@@ -494,7 +567,7 @@
           const d = Math.hypot(ch.x - (P.x + 8), ch.y - (P.y + 8));
           P.sneak = d < 52;
           ch.fleeT = (ch.fleeT || 0) + dt;
-          if (P.sneak && ch.fleeT > 0.25) { ch.fleeT = 0; if (Math.random() < G.Core.FLEE[ch.sp.r]) { bugFlee(ch); floatText('앗, 날아가 버렸어요!', '#e0e0e0'); } }
+          if (P.sneak && ch.fleeT > 0.25) { ch.fleeT = 0; if (Math.random() < G.Core.fleeChance(S, ch.sp.r)) { bugFlee(ch); floatText('앗, 날아가 버렸어요!', '#e0e0e0'); } }
         }
         const [tx, ty] = P.path[0], dx = tx - P.x, dy = ty - P.y, d = Math.hypot(dx, dy), sp = (P.sneak ? 34 : 90) * dt;
         if (Math.abs(dx) > Math.abs(dy)) P.dir = dx > 0 ? 3 : 2; else if (dy) P.dir = dy > 0 ? 0 : 1;
@@ -536,6 +609,7 @@
     const items = [];
     for (const [x, y] of [[16.3, 6.4], [19.2, 4.6], [17.6, 8.3]]) spr('lily', x * T, y * T + Math.sin(time + x) * 0.4);
     deco.forEach((d) => items.push({ y: d.y * T + 12, draw: () => spr(d.k, d.x * T + 8, d.y * T + 14) }));
+    (S.island.litter || []).forEach((l) => items.push({ y: l.y * T + 12, draw: () => spr(l.k === 'can' ? 'can' : 'weeds', l.x * T + 8, l.y * T + 14) }));
     BEACH_DECO.forEach(([x, y, k]) => items.push({ y: y * T + 10, draw: () => spr(k, x * T + 8, y * T + 12) }));
     PALMS.forEach(([x, y], k) => items.push({ y: y * T + 14, draw: () => spr('palm', x * T + 8 + Math.sin(time * 1.1 + k) * 0.4, y * T + 15) }));
     for (const [b, n] of [[HOUSE, 'house'], [SHOP, 'shop'], [MUSEUM, 'museum']]) items.push({ y: (b.y + b.h) * T, draw: () => spr(n, (b.x + b.w / 2) * T, (b.y + b.h) * T + 2) });
@@ -546,8 +620,9 @@
       ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(P.x + 8, P.y + 15, 5, 2, 0, 0, Math.PI * 2); ctx.fill();
       // 그림 칸: 줄 0 아래 1 위 2 왼쪽 3 오른쪽 4 행동(낚시·잠자리채·삽), 칸 0 서기 1·2 걷기
       const pose = fishing ? [4, 0] : P.act > 0 ? [4, P.actKind || 0] : P.path.length ? [P.dir, [1, 0, 2, 0][Math.floor(P.anim) % 4]] : [P.dir, 0];
-      const pw = IMG.player.width / 3, ph = IMG.player.height / 5, bob = P.path.length && Math.floor(P.anim) % 2 ? -0.5 : 0;
-      ctx.drawImage(IMG.player, pose[1] * pw, pose[0] * ph, pw, ph, Math.round((P.x + 8 - pw / 4) * 2) / 2, P.y + 15.5 - ph / 2 + bob, pw / 2, ph / 2); // 그림마다 발끝이 칸 맨 아래
+      const sheet = dressSheet(S) || IMG.player;
+      const pw = sheet.width / 3, ph = sheet.height / 5, bob = P.path.length && Math.floor(P.anim) % 2 ? -0.5 : 0;
+      ctx.drawImage(sheet, pose[1] * pw, pose[0] * ph, pw, ph, Math.round((P.x + 8 - pw / 4) * 2) / 2, P.y + 15.5 - ph / 2 + bob, pw / 2, ph / 2); // 그림마다 발끝이 칸 맨 아래
       if (P.sneak) { ctx.font = '6px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText('살금…', P.x + 8, P.y - 10); }
     } });
     items.sort((a, b) => a.y - b.y).forEach((it) => it.draw());
@@ -595,6 +670,6 @@
   function start() { if (running) return; running = true; resize(); t0 = 0; ready.then(() => requestAnimationFrame(frame)); }
   function stop() { running = false; fishing = null; }
 
-  G.Island = { init, start, stop, tapWorld, zoomStep, ZOOMS, floatText, splash, pop, dust, sparkle, resize, PLOTS, IMG, ready, player: P,
+  G.Island = { init, start, stop, tapWorld, redress, zoomStep, ZOOMS, floatText, splash, pop, dust, sparkle, resize, PLOTS, IMG, ready, player: P,
     _debug: { bugs: () => bugs, fishing: () => fishing, spots: () => spots, spawn: (sp, x, y) => bugs.push({ sp, x, y, hx: x, hy: y, ph: 0, mode: FLY.has(sp.art[0]) ? 'fly' : STILL.has(sp.art[0]) ? 'still' : 'crawl', gone: false, t: 0 }) } };
 })(window);

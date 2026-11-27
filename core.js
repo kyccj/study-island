@@ -136,6 +136,7 @@
           out.push(`${d}(${WD[weekday(d)]}) 놓친 퀘스트 ${missed.length}개: ${missed.map((q) => q.title).join(', ')} → HP -${loss}, 나무가 하루 쉬었어요`);
           S.player.streak = 0;
           damage(S, loss);
+          addLitter(S, missed.length, d);
         }
       }
       growTrees(S, d, !r.rest && (r.missed || []).length > 0);
@@ -306,7 +307,92 @@
     banana: { name: '바나나', sell: 60, hp: 18 },
     grapes: { name: '포도', sell: 70, hp: 20 },
   };
-  const COST = { plant: 8, water: 3, fish: 5, dig: 8, net: 3 };
+  const COST = { plant: 8, water: 3, fish: 5, dig: 8, net: 3 }; // 나무 도구 기준
+  // ───────── 도구(나무→구리→금)·옷 ─────────
+  const TOOLS = { rod: '낚싯대', shovel: '삽', can: '물뿌리개', net: '잠자리채' };
+  const TIER_NAME = ['', '나무', '구리', '금'], TOOL_PRICE = [0, 0, 1500, 6000];
+  const TOOL_OF = { fish: 'rod', dig: 'shovel', water: 'can', net: 'net' };
+  const TIER_COST = { water: [0, 3, 2, 1], fish: [0, 5, 4, 3], dig: [0, 8, 6, 5], net: [0, 3, 2, 2] };
+  const tier = (S, tool) => (S.island.tools && S.island.tools[tool]) || 1;
+  const cost = (S, act) => (TIER_COST[act] ? TIER_COST[act][tier(S, TOOL_OF[act])] : COST[act]);
+  const TOOL_INFO = {
+    rod: ['', '기본 낚싯대', 'HP 4 · 희귀한 물고기가 조금 더 잘 물어요', 'HP 3 · 희귀한 물고기가 훨씬 잘 물어요'],
+    shovel: ['', '기본 삽', 'HP 6 · 화석이 더 잘 나와요', 'HP 5 · 화석이 훨씬 잘 나와요'],
+    can: ['', '기본 물뿌리개', 'HP 2로 물 주기', 'HP 3으로 모든 나무에 한 번에 물 주기'],
+    net: ['', '기본 잠자리채', 'HP 2 · 잘 안 놓치고 덜 도망가요', 'HP 2 · 거의 안 놓치고 훨씬 덜 도망가요'],
+  };
+  function buyTool(S, tool) {
+    const I = S.island; I.tools = I.tools || { rod: 1, shovel: 1, can: 1, net: 1 };
+    const t = tier(S, tool); if (t >= 3) return { err: '이미 금 도구예요' };
+    const price = TOOL_PRICE[t + 1]; if (S.player.coins < price) return { err: `코인이 부족해요 (필요 ${price})` };
+    S.player.coins -= price; I.tools[tool] = t + 1; return { ok: true, tier: t + 1 };
+  }
+  // 옷: 상의·하의는 색(캐릭터 그림을 물들임), 모자는 그림
+  const TOPS = [
+    { id: 'basic', name: '노랑 티셔츠', c: '#f4d35e', price: 0 }, { id: 'strawberry', name: '딸기우유 티셔츠', c: '#f6a5c0', price: 300 },
+    { id: 'mint', name: '민트 티셔츠', c: '#9fe0c9', price: 300 }, { id: 'sky', name: '하늘 티셔츠', c: '#9cc9f5', price: 300 },
+    { id: 'lavender', name: '라벤더 티셔츠', c: '#c3a9ef', price: 400 }, { id: 'tomato', name: '토마토 티셔츠', c: '#f27c64', price: 400 },
+    { id: 'cream', name: '크림 티셔츠', c: '#f6efd9', price: 350 }, { id: 'forest', name: '숲속 티셔츠', c: '#6fae6a', price: 450 },
+    { id: 'navy', name: '밤하늘 티셔츠', c: '#4f5f9a', price: 500 }, { id: 'peach', name: '복숭아 티셔츠', c: '#ffc59a', price: 350 },
+    { id: 'gold', name: '반짝 황금 티셔츠', c: '#ffd23a', price: 3000 },
+  ];
+  const BOTTOMS = [
+    { id: 'basic', name: '초록 반바지', c: '#7cb36b', price: 0 }, { id: 'denim', name: '청 반바지', c: '#6b8fc7', price: 300 },
+    { id: 'brown', name: '코코아 반바지', c: '#9b6a4f', price: 300 }, { id: 'pink', name: '분홍 반바지', c: '#f2a2bd', price: 350 },
+    { id: 'white', name: '흰 반바지', c: '#f1ece2', price: 300 }, { id: 'black', name: '검정 반바지', c: '#4a4448', price: 400 },
+    { id: 'yellow', name: '바나나 반바지', c: '#f2d56b', price: 350 },
+  ];
+  const HATS = [
+    { id: 'straw', name: '밀짚모자', price: 500 }, { id: 'beanie', name: '노랑 비니', price: 400 }, { id: 'cap', name: '하늘 야구모자', price: 400 },
+    { id: 'flower', name: '꽃 화관', price: 800 }, { id: 'beret', name: '빨간 베레모', price: 600 }, { id: 'wizard', name: '마법사 모자', price: 1500 },
+    { id: 'crown', name: '작은 왕관', price: 5000 }, { id: 'cat', name: '고양이 귀 머리띠', price: 900 }, { id: 'bow', name: '분홍 리본', price: 600 },
+    { id: 'frog', name: '개구리 모자', price: 1200 },
+  ];
+  const CLOTHES = { top: TOPS, bottom: BOTTOMS, hat: HATS };
+  function wardrobe(S) {
+    const I = S.island;
+    I.wardrobe = I.wardrobe || { top: ['basic'], bottom: ['basic'], hat: [] };
+    I.outfit = I.outfit || { top: 'basic', bottom: 'basic', hat: null };
+    return I.wardrobe;
+  }
+  const owns = (S, slot, id) => wardrobe(S)[slot].includes(id);
+  function wear(S, slot, id) { wardrobe(S); if (id && !owns(S, slot, id)) return { err: '없는 옷이에요' }; S.island.outfit[slot] = id; return { ok: true }; }
+  // 오늘의 상점(날짜로 정해짐): 씨앗 2, 상의 2, 하의 1, 모자 1
+  function shopToday(date) {
+    let h = 7; for (const ch of date) h = (h * 31 + ch.charCodeAt(0)) % 2147483647;
+    const r = () => ((h = (h * 48271) % 2147483647) / 2147483647);
+    const pickN = (arr, n) => { const a = arr.slice(), out = []; while (out.length < n && a.length) out.push(a.splice(Math.floor(r() * a.length), 1)[0]); return out; };
+    const kinds = Object.keys(FRUITS);
+    return {
+      seeds: pickN(kinds, 2).map((k) => ({ kind: k, price: FRUITS[k].sell * 4 })),
+      top: pickN(TOPS.filter((x) => x.price), 2), bottom: pickN(BOTTOMS.filter((x) => x.price), 1), hat: pickN(HATS, 1),
+    };
+  }
+  function buySeed(S, kind, price) {
+    if (S.player.coins < price) return { err: `코인이 부족해요 (필요 ${price})` };
+    S.player.coins -= price; S.island.seeds[kind] = (S.island.seeds[kind] || 0) + 1; return { ok: true };
+  }
+  function buyClothes(S, slot, id) {
+    const it = CLOTHES[slot].find((x) => x.id === id); if (!it) return { err: '없는 옷' };
+    if (owns(S, slot, id)) return { err: '이미 있어요' };
+    if (S.player.coins < it.price) return { err: `코인이 부족해요 (필요 ${it.price})` };
+    S.player.coins -= it.price; wardrobe(S)[slot].push(id); return { ok: true, it };
+  }
+  // ───────── 잡초·쓰레기: 놓친 날 생기고, 7일 깨끗하면 ★3 조건 ─────────
+  function addLitter(S, missedCount, date) {
+    const I = S.island; I.litter = I.litter || []; I.newLitter = I.newLitter || [];
+    const n = Math.min(6, missedCount * 2) + (missedCount >= 2 ? 1 : 0);
+    for (let k = 0; k < n && I.litter.length + I.newLitter.length < 20; k++) I.newLitter.push(k === n - 1 && missedCount >= 2 ? 'can' : 'weeds');
+    if (n) I.cleanFrom = null;
+    void date;
+  }
+  function clearLitter(S, idx, date) {
+    const I = S.island; if (!I.litter || !I.litter[idx]) return { err: '없어요' };
+    const it = I.litter.splice(idx, 1)[0];
+    if (!I.litter.length && !(I.newLitter || []).length) I.cleanFrom = date;
+    return { ok: true, kind: it.k };
+  }
+  const cleanDays = (S, today) => { const I = S.island; if ((I.litter || []).length || (I.newLitter || []).length || !I.cleanFrom) return 0; return Math.round((parseYmd(today) - parseYmd(I.cleanFrom)) / 864e5); };
   const PLOTS = 6, FRUIT_PER_HARVEST = 3, GROW_DAYS = 3;
   function defaultIsland() {
     return {
@@ -319,6 +405,10 @@
       dug: {},
       stars: 1,
       pos: null,
+      tools: { rod: 1, shovel: 1, can: 1, net: 1 },
+      wardrobe: { top: ['basic'], bottom: ['basic'], hat: [] },
+      outfit: { top: 'basic', bottom: 'basic', hat: null },
+      litter: [], newLitter: [], cleanFrom: null,
     };
   }
   // 나무 상태: g=0..3 (물 준 날 수). 처음엔 새싹→묘목→작은나무→(3) 다 자라며 첫 열매.
@@ -339,9 +429,17 @@
     if (!t) return { err: '심은 게 없어요' };
     if (t.watered === date) return { err: '오늘은 이미 물을 줬어요' };
     if (treeStage(t) === 'fruit') return { err: '열매가 다 익었어요. 수확하세요!' };
-    const e = needHp(S, COST.water); if (e) return { err: e };
-    S.player.hp -= COST.water; t.watered = date;
-    return { ok: true, cost: COST.water };
+    const c = cost(S, 'water'), e = needHp(S, c); if (e) return { err: e };
+    S.player.hp -= c; t.watered = date;
+    return { ok: true, cost: c };
+  }
+  // 금 물뿌리개: 한 번에 모든 나무
+  function waterAll(S, date) {
+    const ts = S.island.trees.filter((t) => t && t.watered !== date && treeStage(t) !== 'fruit');
+    if (!ts.length) return { err: '물 줄 나무가 없어요' };
+    const c = 3, e = needHp(S, c); if (e) return { err: e };
+    S.player.hp -= c; ts.forEach((t) => { t.watered = date; });
+    return { ok: true, cost: c, n: ts.length };
   }
   function harvest(S, plot) {
     const I = S.island, t = I.trees[plot];
@@ -388,13 +486,18 @@
   function lucky(S, rng = Math.random) {
     const x = rng();
     if (x < 0.55) { const k = Object.keys(FRUITS)[Math.floor(rng() * 6)]; S.island.seeds[k] = (S.island.seeds[k] || 0) + 1; return { what: 'seed', kind: k, text: `${FRUITS[k].name} 씨앗` }; }
+    if (x >= 0.8 && x < 0.9) {
+      const slots = ['top', 'bottom', 'hat'], pool = [];
+      for (const sl of slots) for (const it of CLOTHES[sl]) if (it.price && it.id !== 'crown' && it.id !== 'gold' && !owns(S, sl, it.id)) pool.push([sl, it]);
+      if (pool.length) { const [sl, it] = pool[Math.floor(rng() * pool.length)]; wardrobe(S)[sl].push(it.id); return { what: 'clothes', slot: sl, id: it.id, text: `${it.name}!` }; }
+    }
     if (x < 0.9) { const c = 100 + Math.floor(rng() * 5) * 50; S.player.coins += c; return { what: 'coins', coins: c, text: `코인 주머니 (+${c})` }; }
     const c = 1000; S.player.coins += c; const k = Object.keys(FRUITS)[Math.floor(rng() * 6)]; S.island.seeds[k] = (S.island.seeds[k] || 0) + 2;
     return { what: 'chest', coins: c, kind: k, text: `보물상자! 코인 +${c}, ${FRUITS[k].name} 씨앗 2개` };
   }
   function digResult(S, date, rng = Math.random) {
     const x = rng();
-    if (x < 0.6) { const sp = D().pick(D().FOSSILS, rng); return { type: 'catch', sp, ...addCatch(S, sp, date) }; }
+    if (x < [0, 0.6, 0.68, 0.75][tier(S, 'shovel')]) { const sp = D().pick(D().FOSSILS, rng); return { type: 'catch', sp, ...addCatch(S, sp, date) }; }
     if (x < 0.92) {
       const y = rng(), id = y < 0.35 ? 'stone' : y < 0.65 ? 'copper' : y < 0.82 ? 'silver' : y < 0.92 ? 'gold' : ['ruby', 'emerald', 'amethyst', 'topaz'][Math.floor(rng() * 4)];
       S.island.bag.ore[id] = (S.island.bag.ore[id] || 0) + 1; return { type: 'ore', id };
@@ -404,14 +507,14 @@
   function dig(S, date, spotKey, rng) {
     const I = S.island; I.dug[date] = I.dug[date] || [];
     if (I.dug[date].includes(spotKey)) return { err: '이미 판 곳이에요' };
-    const e = spend(S, COST.dig); if (e) return { err: e };
+    const e = spend(S, cost(S, 'dig')); if (e) return { err: e };
     I.dug[date].push(spotKey);
     for (const k of Object.keys(I.dug)) if (k < addDays(date, -3)) delete I.dug[k];
     return { ok: true, ...digResult(S, date, rng) };
   }
   // 낚시: 던질 때 HP를 쓰고 무엇이 물지 정해 둔다(그림자 크기로 힌트).
   function castLine(S, loc, when, rng = Math.random) {
-    const e = spend(S, COST.fish); if (e) return { err: e };
+    const e = spend(S, cost(S, 'fish')); if (e) return { err: e };
     if (rng() < 0.05) return { ok: true, lucky: true, size: 2 };
     const sp = D().pick(D().fishPool(loc, when), rng, luckBonus(S));
     return { ok: true, sp, size: sp ? sp.size : 1 };
@@ -424,11 +527,12 @@
   const NET_HIT = [0, 0.9, 0.8, 0.65, 0.5, 0.4];
   const FLEE = [0, 0.02, 0.04, 0.07, 0.1, 0.13]; // 다가가는 동안 0.25초마다
   function swingNet(S, sp, date, rng = Math.random) {
-    const e = spend(S, COST.net); if (e) return { err: e };
-    if (rng() > NET_HIT[sp.r]) return { ok: true, miss: true };
+    const e = spend(S, cost(S, 'net')); if (e) return { err: e };
+    if (rng() > Math.min(0.97, NET_HIT[sp.r] + [0, 0, 0.08, 0.15][tier(S, 'net')])) return { ok: true, miss: true };
     return { ok: true, type: 'catch', sp, ...addCatch(S, sp, date) };
   }
-  const luckBonus = (S) => 0; // 4단계: 행운 친구
+  const luckBonus = (S) => [0, 0, 0.2, 0.5][tier(S, 'rod')]; // 4단계: 행운 친구도 더할 예정
+  const fleeChance = (S, r) => FLEE[r] * [1, 1, 0.8, 0.6][tier(S, 'net')];
   function sellItem(S, cat, id, n = 1) {
     const bag = S.island.bag[cat]; n = Math.min(n, bag[id] || 0); if (n <= 0) return { err: '없어요' };
     const price = cat === 'ore' ? D().ORES[id].sell : D().BY_ID[id].sell;
@@ -446,18 +550,18 @@
   const STAR_RULES = [
     null, null,
     { dex: 15, text: '도감 15종 + 과일나무 3그루', ok: (S) => S.island.trees.filter(Boolean).length >= 3 },
-    { dex: 50, text: '도감 50종 + 퀘스트 올클리어 7일 연속(최고 기록)', ok: (S) => S.player.bestStreak >= 7 },
-    { dex: 110, text: '도감 110종 + 금 도구 1개 (상점 3단계)', ok: (S) => false },
+    { dex: 50, text: '도감 50종 + 잡초·쓰레기 없는 섬 7일', ok: (S, today) => cleanDays(S, today) >= 7 },
+    { dex: 110, text: '도감 110종 + 금 도구 1개', ok: (S) => Object.keys(TOOLS).some((t) => tier(S, t) >= 3) },
     { dex: 200, text: '도감 200종', ok: () => true },
   ];
-  function computeStars(S) {
+  function computeStars(S, today = gameDate()) {
     let st = 1;
-    for (let k = 2; k <= 5; k++) { const r = STAR_RULES[k]; if (dexCount(S) >= r.dex && r.ok(S)) st = k; else break; }
+    for (let k = 2; k <= 5; k++) { const r = STAR_RULES[k]; if (dexCount(S) >= r.dex && r.ok(S, today)) st = k; else break; }
     return st;
   }
   // 별점이 올랐으면 새 별점을 돌려준다
-  function checkStars(S) {
-    const st = computeStars(S);
+  function checkStars(S, today) {
+    const st = computeStars(S, today);
     if (st > (S.island.stars || 1)) { S.island.stars = st; return st; }
     return null;
   }
@@ -465,6 +569,8 @@
   G.Core = {
     DAY_SHIFT_H, ymd, parseYmd, addDays, gameDate, weekday, weekStart, WD,
     R, maxHp, MISS_HP, CHURCH_HP, BASE_MAX_HP,
+    TOOLS, TIER_NAME, TOOL_PRICE, TOOL_INFO, tier, cost, buyTool, waterAll, fleeChance, TOPS, BOTTOMS, HATS, CLOTHES, wardrobe, owns, wear, shopToday, buySeed, buyClothes,
+    addLitter, clearLitter, cleanDays,
     addCatch, lucky, dig, digResult, castLine, landFish, swingNet, FLEE, NET_HIT, sellItem, eatFish, dexCount, STAR_RULES, computeStars, checkStars,
     FRUITS, COST, PLOTS, GROW_DAYS, defaultIsland, treeStage, plant, water, harvest, growTrees, eat, sell, heal,
     SUBJECTS, SUBJECT_BY_WD, questsFor, isComplete, defaultState, dayRec, qRec,

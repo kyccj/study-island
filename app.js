@@ -28,6 +28,8 @@
   // 테스트용: 주소 끝에 ?date=2026-11-29 를 붙이면 그 날짜로 동작
   const fakeDate = new URLSearchParams(location.search).get('date');
   const today = () => fakeDate || C.gameDate();
+  // 잡초 기록 시작점: 처음이거나 3단계 이전 저장이면 오늘부터 깨끗한 섬
+  if (!S.island.cleanFrom && !S.island.litter.length && !S.island.newLitter.length) S.island.cleanFrom = today();
   let tab = 'island';
   let overlay = null; // { kind:'vocab'|'timer', ... }
 
@@ -524,6 +526,15 @@
     water: (ds) => islandAct('water', +ds.i),
     harvest: (ds) => islandAct('harvest', +ds.i),
     closeSheet: () => closeSheet(),
+    waterAll: () => { const r = C.waterAll(S, today()); if (r.err) return toast(r.err); save(); C.PLOTS && S.island.trees.forEach((t, i) => { if (t) window.Island.splash(i); }); window.Island.floatText(`❤️-${r.cost} · 나무 ${r.n}그루`, '#8ad8ff'); closeSheet(); renderHud(); },
+    shopTab: (ds) => { shopTab = ds.k; shopSheet(); },
+    closetTab: (ds) => { closetTab = ds.k; closetSheet(); },
+    buyTool: (ds) => { const r = C.buyTool(S, ds.k); if (r.err) return toast(r.err); save(); renderHud(); shopSheet();
+      showCard(`<div class="ribbon gold">NEW TOOL!</div><div class="rays r${r.tier + 2}"><img class="px big-icon" src="assets/a/tool_${ds.k}${r.tier}.png"></div><h2>${C.TIER_NAME[r.tier]} ${C.TOOLS[ds.k]}!</h2><p class="muted">${C.TOOL_INFO[ds.k][r.tier]}</p>`, `rare${r.tier + 2}`); afterCatch(); },
+    buySeed: (ds) => { const r = C.buySeed(S, ds.k, +ds.p); if (r.err) return toast(r.err); save(); renderHud(); shopSheet(); toast(`🌱 ${C.FRUITS[ds.k].name} 씨앗을 샀어요`); },
+    buyClothes: (ds) => { const r = C.buyClothes(S, ds.s, ds.id); if (r.err) return toast(r.err); save(); renderHud(); shopSheet();
+      if (confirm(`${r.it.name}! 지금 입어 볼까요?`)) { C.wear(S, ds.s, ds.id); save(); window.Island.redress(); } },
+    wear: (ds) => { const r = C.wear(S, ds.s, ds.id || null); if (r.err) return toast(r.err); save(); window.Island.redress(); closetSheet(); },
     zoom: (ds) => { const n = window.Island.zoomStep(+ds.d); S.settings.zoom = n; save(); toast(`🔍 가로 ${n}칸 보기`); },
     cardOk: () => { cardQueue.shift(); if (cardQueue.length) nextCard(); else { $('#modal').hidden = true; render(); } },
     dexCat: (ds) => { dexCat = ds.k; render(); },
@@ -602,7 +613,7 @@
       return openSheet(`<h3>🌱 빈 자리</h3><p class="muted">씨앗을 골라 심어요 · ❤️ -${C.COST.plant}</p>
         <div class="grid">${seeds.length ? seeds.map(([k, f]) => `<button class="slot btnlike" data-act="plant" data-i="${i}" data-k="${k}">
           <img src="assets/fruit-${k}.png" class="px icon"><b class="cnt">${S.island.seeds[k]}</b><div class="slot-name">${f.name}</div></button>`).join('')
-          : '<p class="muted">씨앗이 없어요. 상점은 다음 단계에서 열려요.</p>'}</div>
+          : '<p class="muted">씨앗이 없어요. 상점에서 사거나, 낚시·땅파기 럭키로 얻어요.</p>'}</div>
         <button class="btn ghost wide" data-act="closeSheet">닫기</button>`);
     }
     const st = C.treeStage(t), f = C.FRUITS[t.kind];
@@ -612,7 +623,8 @@
     openSheet(`<div class="sheet-head"><img src="assets/fruit-${t.kind}.png" class="px icon"><div><h3>${f.name}나무 · ${STAGE_NAME[st]}</h3><p class="muted">${info}</p></div></div>
       <div class="growbar">${[0, 1, 2].map((k) => `<i class="${k < t.g ? 'on' : ''}"></i>`).join('')}</div>
       ${st === 'fruit' ? `<button class="btn primary wide big" data-act="harvest" data-i="${i}">🧺 수확하기 (×${3})</button>`
-        : `<button class="btn primary wide big" data-act="water" data-i="${i}" ${watered ? 'disabled' : ''}>${watered ? '💧 오늘 물 줬어요 · 내일 자라요' : `💧 물 주기 · ❤️ -${C.COST.water}`}</button>`}
+        : `<button class="btn primary wide big" data-act="water" data-i="${i}" ${watered ? 'disabled' : ''}>${watered ? '💧 오늘 물 줬어요 · 내일 자라요' : `💧 물 주기 · ❤️ -${C.cost(S, 'water')}`}</button>`}
+      ${C.tier(S, 'can') >= 3 ? `<button class="btn wide" data-act="waterAll">✨ 금 물뿌리개: 모든 나무에 물 주기 · ❤️ -3</button>` : ''}
       <p class="muted small">공부 퀘스트를 놓친 날엔 물을 줘도 자라지 않아요.</p>
       <button class="btn ghost wide" data-act="closeSheet">닫기</button>`);
   }
@@ -632,9 +644,50 @@
   }
   function onIslandTap(obj) {
     if (obj.type === 'plot') return plotSheet(obj.i);
-    if (obj.type === 'house') return openSheet(`<h3>🏠 우리 집</h3><p class="muted">집 꾸미기는 다음에 열려요. 오늘도 공부 화이팅!</p><button class="btn ghost wide" data-act="closeSheet">닫기</button>`);
-    if (obj.type === 'shop') return openSheet(`<h3>🏪 상점</h3><p class="muted">도구·씨앗·옷 상점은 3단계에서 열려요. 지금은 가방 탭에서 팔 수 있어요.</p><button class="btn ghost wide" data-act="closeSheet">닫기</button>`);
+    if (obj.type === 'house') return closetSheet();
+    if (obj.type === 'shop') return shopSheet();
     if (obj.type === 'museum') { tab = 'dex'; render(); return; }
+  }
+
+  // ───────── 상점·옷장 ─────────
+  let shopTab = 'tool', closetTab = 'top';
+  const clothIcon = (slot, id) => `assets/a/${slot}_${id}.png`;
+  const SLOT_NAME = { top: '상의', bottom: '하의', hat: '모자' };
+  function shopSheet() {
+    const d = today(), sh = C.shopToday(d), coins = S.player.coins;
+    const tabs = [['tool', '🛠️ 도구'], ['seed', '🌱 씨앗'], ['cloth', '👕 옷']];
+    let body = '';
+    if (shopTab === 'tool') {
+      body = Object.entries(C.TOOLS).map(([k, name]) => {
+        const t = C.tier(S, k), nx = t + 1;
+        return `<div class="shop-row"><img src="assets/a/tool_${k}${t}.png" class="px icon"><div class="grow"><b>${C.TIER_NAME[t]} ${name}</b><p class="muted small">${C.TOOL_INFO[k][t]}</p>
+          ${nx <= 3 ? `<p class="small">→ <b>${C.TIER_NAME[nx]} ${name}</b>: ${C.TOOL_INFO[k][nx]}</p>` : '<p class="small gold-t">최고 등급!</p>'}</div>
+          ${nx <= 3 ? `<button class="btn primary" data-act="buyTool" data-k="${k}" ${coins < C.TOOL_PRICE[nx] ? 'disabled' : ''}>${COIN}${C.TOOL_PRICE[nx]}</button>` : ''}</div>`;
+      }).join('');
+    } else if (shopTab === 'seed') {
+      body = `<p class="muted small">오늘의 씨앗 (매일 바뀌어요)</p>` + sh.seeds.map(({ kind, price }) => `<div class="shop-row"><img src="assets/fruit-${kind}.png" class="px icon"><div class="grow"><b>${C.FRUITS[kind].name} 씨앗</b><p class="muted small">가진 씨앗 ${S.island.seeds[kind] || 0}개</p></div>
+        <button class="btn primary" data-act="buySeed" data-k="${kind}" data-p="${price}" ${coins < price ? 'disabled' : ''}>${COIN}${price}</button></div>`).join('');
+    } else {
+      const items = [...sh.top.map((x) => ['top', x]), ...sh.bottom.map((x) => ['bottom', x]), ...sh.hat.map((x) => ['hat', x])];
+      body = `<p class="muted small">오늘의 옷 (매일 바뀌어요) · 산 옷은 집에서 갈아입어요</p>` + items.map(([sl, it]) => {
+        const own = C.owns(S, sl, it.id);
+        return `<div class="shop-row"><img src="${clothIcon(sl, it.id)}" class="px icon"><div class="grow"><b>${esc(it.name)}</b><p class="muted small">${SLOT_NAME[sl]}</p></div>
+          ${own ? '<span class="muted small">가지고 있음</span>' : `<button class="btn primary" data-act="buyClothes" data-s="${sl}" data-id="${it.id}" ${coins < it.price ? 'disabled' : ''}>${COIN}${it.price}</button>`}</div>`;
+      }).join('');
+    }
+    openSheet(`<div class="row"><h3>🏪 상점</h3><span class="chip">${COIN}${coins}</span></div>
+      <div class="seg">${tabs.map(([k, l]) => `<button class="${shopTab === k ? 'on' : ''}" data-act="shopTab" data-k="${k}">${l}</button>`).join('')}</div>
+      <div class="shop-list">${body}</div><p class="muted small">팔기는 가방 탭에서 해요.</p><button class="btn ghost wide" data-act="closeSheet">닫기</button>`);
+  }
+  function closetSheet() {
+    const w = C.wardrobe(S), o = S.island.outfit;
+    const tabs = [['top', '👕 상의'], ['bottom', '🩳 하의'], ['hat', '🎩 모자']];
+    const list = C.CLOTHES[closetTab].filter((it) => w[closetTab].includes(it.id));
+    const cells = (closetTab === 'hat' ? [`<button class="slot btnlike ${!o.hat ? 'on' : ''}" data-act="wear" data-s="hat" data-id=""><div class="icon none">✕</div><div class="slot-name">벗기</div></button>`] : [])
+      .concat(list.map((it) => `<button class="slot btnlike ${o[closetTab] === it.id ? 'on' : ''}" data-act="wear" data-s="${closetTab}" data-id="${it.id}"><img src="${clothIcon(closetTab, it.id)}" class="px icon"><div class="slot-name">${esc(it.name)}</div></button>`));
+    openSheet(`<h3>🏠 우리 집 · 옷장</h3><p class="muted small">상점에서 산 옷, 낚시 럭키로 얻은 옷을 입어요. 집 꾸미기는 나중에 열려요.</p>
+      <div class="seg">${tabs.map(([k, l]) => `<button class="${closetTab === k ? 'on' : ''}" data-act="closetTab" data-k="${k}">${l}<small>${w[k].length}/${C.CLOTHES[k].length}</small></button>`).join('')}</div>
+      <div class="grid g4">${cells.join('')}</div><button class="btn ghost wide" data-act="closeSheet">닫기</button>`);
   }
 
   // ───────── 잡았을 때 카드 ─────────
@@ -663,25 +716,26 @@
     if (navigator.vibrate) navigator.vibrate(sp.r >= 4 ? [60, 40, 120] : 40);
   }
   function luckyCard(r) {
-    const icon = r.what === 'seed' ? `assets/fruit-${r.kind}.png` : r.what === 'coins' ? 'assets/moneybag.png' : 'assets/chest.png';
+    const icon = r.what === 'seed' ? `assets/fruit-${r.kind}.png` : r.what === 'coins' ? 'assets/moneybag.png' : r.what === 'clothes' ? clothIcon(r.slot, r.id) : 'assets/chest.png';
+    if (r.what === 'clothes') window.Island.redress();
     showCard(`<div class="ribbon gold">LUCKY!</div><div class="rays r4"><img class="px big-icon" src="${icon}"></div><h2>${esc(r.text)}</h2><p class="muted">운이 좋았어요!</p>`, 'rare4');
   }
   function afterCatch() {
-    const st = C.checkStars(S);
+    const st = C.checkStars(S, today());
     save(); renderHud();
     if (st) {
-      const opened = { 2: '🏖️ 해변이 열렸어요! 바다낚시를 할 수 있어요.', 3: '🌲 숲이 열렸어요! 희귀한 곤충이 살아요.', 4: '⛰️ 동굴 구역은 3단계에서 열려요.', 5: '🏔️ 섬 꼭대기는 4단계에서 열려요.' }[st];
+      const opened = { 2: '🏖️ 해변이 열렸어요! 바다낚시를 할 수 있어요.', 3: '🌲 숲이 열렸어요! 희귀한 곤충이 살아요.', 4: '⛰️ 동굴 구역은 곧 열려요.', 5: '🏔️ 섬 꼭대기는 곧 열려요.' }[st];
       showCard(`<div class="ribbon gold">섬 별점 UP!</div><div class="big-star">${'★'.repeat(st)}</div><h2>섬이 ★${st}이 되었어요!</h2><p>${opened}</p><p class="muted">주민 이사는 4단계에서 시작돼요.</p>`, 'rare5');
     }
   }
   const islandHooks = {
     state: () => S, today, save, onTap: onIslandTap, toast,
     isDug: (k) => (S.island.dug[today()] || []).includes(k),
-    tryFish: (loc, start) => { if (S.player.hp < C.COST.fish) return toast(`HP가 부족해요 (필요 ${C.COST.fish}). 공부하면 HP가 들어와요!`); start(); },
+    tryFish: (loc, start) => { const c = C.cost(S, 'fish'); if (S.player.hp < c) return toast(`HP가 부족해요 (필요 ${c}). 공부하면 HP가 들어와요!`); start(); },
     cast: (loc) => {
-      const r = C.castLine(S, loc, new Date());
+      const c = C.cost(S, 'fish'), r = C.castLine(S, loc, new Date());
       if (r.err) { toast(r.err); return r; }
-      save(); renderHud(); window.Island.floatText(`❤️-${C.COST.fish}`, '#ff8a8a'); return r;
+      save(); renderHud(); window.Island.floatText(`❤️-${c}`, '#ff8a8a'); return r;
     },
     land: (cast) => {
       const r = C.landFish(S, cast, today());
@@ -689,21 +743,29 @@
       afterCatch();
     },
     netSwing: (sp) => {
-      if (S.player.hp < C.COST.net) { toast(`HP가 부족해요 (필요 ${C.COST.net})`); return { err: 'hp' }; }
+      const c = C.cost(S, 'net');
+      if (S.player.hp < c) { toast(`HP가 부족해요 (필요 ${c})`); return { err: 'hp' }; }
       const r = C.swingNet(S, sp, today());
-      window.Island.floatText(`❤️-${C.COST.net}`, '#ff8a8a');
+      window.Island.floatText(`❤️-${c}`, '#ff8a8a');
       save(); renderHud();
       if (!r.miss && !r.err) { catchCard(sp, r.first, '잡았다!'); afterCatch(); }
       return r;
     },
     dig: (k, x, y) => {
-      const r = C.dig(S, today(), k);
+      const c = C.cost(S, 'dig'), r = C.dig(S, today(), k);
       if (r.err) { toast(r.err); return; }
-      window.Island.floatText(`❤️-${C.COST.dig}`, '#ff8a8a', [x, y - 8]); window.Island.sparkle(x, y);
+      window.Island.floatText(`❤️-${c}`, '#ff8a8a', [x, y - 8]); window.Island.sparkle(x, y);
       if (r.type === 'catch') catchCard(r.sp, r.first, '발견했다!');
       else if (r.type === 'ore') { const o = D.ORES[r.id]; showCard(`<div class="rays r${r.id === 'stone' ? 1 : 3}"><img class="px big-icon" src="assets/${o.icon}.png"></div><h2>${o.name}${eul(o.name)} 캤다!</h2><p class="muted">팔면 ${COIN}${o.sell}</p>`, r.id === 'stone' ? '' : 'rare3'); }
       else luckyCard(r);
       afterCatch();
+    },
+    clearLitter: (idx, x, y) => {
+      const r = C.clearLitter(S, idx, today()); if (r.err) return;
+      window.Island.sparkle(x, y, 10);
+      window.Island.floatText(r.kind === 'can' ? '쓰레기 치웠어요!' : '잡초 뽑았어요!', '#d8ffd0', [x, y - 10]);
+      if (!S.island.litter.length) toast('✨ 섬이 깨끗해졌어요! 7일 동안 유지하면 ★3 조건 달성');
+      save(); afterCatch();
     },
   };
 
@@ -712,7 +774,9 @@
   function dexView() {
     const I = S.island, total = C.dexCount(S), st = I.stars || 1, next = C.STAR_RULES[st + 1];
     let html = `<div class="card star-card"><div class="row"><h3>🏝️ 섬 별점 <span class="gold-t">${'★'.repeat(st)}</span><span class="off">${'★'.repeat(5 - st)}</span></h3><b>${total}종</b></div>
-      ${next ? `<p class="muted">다음 ★${st + 1}: ${esc(next.text)}</p><div class="bar xp"><i style="width:${Math.min(100, (total / next.dex) * 100)}%"></i><em>도감 ${total}/${next.dex}</em></div>` : '<p>최고 별점이에요!</p>'}</div>`;
+      ${next ? `<p class="muted">다음 ★${st + 1}: ${esc(next.text)}</p><div class="bar xp"><i style="width:${Math.min(100, (total / next.dex) * 100)}%"></i><em>도감 ${total}/${next.dex}</em></div>
+      ${st + 1 === 3 ? `<p class="small">🌿 깨끗한 섬 ${Math.min(7, C.cleanDays(S, today()))}/7일${(I.litter || []).length ? ` · 지금 잡초·쓰레기 ${I.litter.length}개` : ''}</p>` : ''}
+      ${st + 1 === 4 ? `<p class="small">🛠️ 금 도구 ${Object.keys(C.TOOLS).some((t) => C.tier(S, t) >= 3) ? '있음 ✓' : '없음 (상점)'}</p>` : ''}` : '<p>최고 별점이에요!</p>'}</div>`;
     const cats = [['fish', '🐟 물고기', D.FISH], ['bug', '🦋 곤충', D.BUGS], ['fossil', '🦴 화석', D.FOSSILS], ['fruit', '🍒 과일', null]];
     html += `<div class="seg dexseg">${cats.map(([k, l, list]) => `<button class="${dexCat === k ? 'on' : ''}" data-act="dexCat" data-k="${k}">${l}<small>${Object.keys(I.dex[k] || {}).length}/${list ? list.length : 6}</small></button>`).join('')}</div>`;
     const when = new Date();

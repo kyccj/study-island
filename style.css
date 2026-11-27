@@ -203,3 +203,15 @@ body:has(#app.ov) { padding-bottom: 0; }
 .zoom { position: absolute; right: 12px; top: 64px; display: grid; gap: 8px; pointer-events: auto; }
 .zoom button { width: 42px; height: 42px; border-radius: 12px; border: 2px solid #2b1d14; background: #fff6e0e6; color: #4a3424; font-size: 22px; font-weight: 800; box-shadow: 0 3px 0 #0004; }
 .zoom button:active { transform: translateY(2px); box-shadow: none; }
+
+/* 상점·옷장 */
+.shop-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; max-height: 52vh; overflow-y: auto; }
+.shop-row { display: flex; align-items: center; gap: 10px; background: #fff6e4; border: 2px solid #e3cfa6; border-radius: 12px; padding: 8px 10px; color: #4a3424; }
+.shop-row .icon { width: 44px; height: 44px; flex: none; }
+.shop-row .grow { flex: 1; min-width: 0; }
+.shop-row p { margin: 2px 0 0; }
+.shop-row .btn { flex: none; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+.sheet-card .seg { margin-top: 8px; }
+.sheet-card .seg small { display: block; font-size: 10px; opacity: .8; }
+.slot.on { outline: 3px solid var(--accent); }
+.icon.none { display: grid; place-items: center; font-size: 22px; color: #b09070; }

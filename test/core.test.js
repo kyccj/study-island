@@ -188,5 +188,33 @@ t('섬 별점: 도감 15종 + 나무 3그루면 ★2', () => {
   S.island.trees[0] = S.island.trees[1] = S.island.trees[2] = { kind: 'cherry', g: 0 };
   assert.strictEqual(C.checkStars(S), 2); assert.strictEqual(C.checkStars(S), null);
 });
+t('도구: 등급마다 HP가 덜 들고, 금 도구가 있으면 ★4 조건', () => {
+  const S = C.defaultState(); S.player.coins = 10000;
+  assert.strictEqual(C.cost(S, 'dig'), 8);
+  assert.ok(C.buyTool(S, 'shovel').ok); assert.strictEqual(C.cost(S, 'dig'), 6); assert.strictEqual(S.player.coins, 8500);
+  assert.ok(C.buyTool(S, 'shovel').ok); assert.strictEqual(C.cost(S, 'dig'), 5);
+  assert.ok(C.buyTool(S, 'shovel').err);
+  assert.ok(C.STAR_RULES[4].ok(S)); assert.ok(!C.STAR_RULES[4].ok(C.defaultState()));
+});
+t('옷: 사고 입기, 없는 옷은 못 입음, 상점은 날짜마다 같음', () => {
+  const S = C.defaultState(); S.player.coins = 1000;
+  assert.ok(C.wear(S, 'hat', 'straw').err);
+  assert.ok(C.buyClothes(S, 'hat', 'straw').ok); assert.ok(C.wear(S, 'hat', 'straw').ok); assert.strictEqual(S.island.outfit.hat, 'straw');
+  assert.deepStrictEqual(C.shopToday('2026-11-27'), C.shopToday('2026-11-27'));
+  assert.strictEqual(C.shopToday('2026-11-27').seeds.length, 2);
+});
+t('잡초: 놓친 날 생기고, 다 치우면 7일 뒤 ★3 조건', () => {
+  const S = C.defaultState(); S.island.cleanFrom = '2026-11-01';
+  assert.strictEqual(C.cleanDays(S, '2026-11-10'), 9);
+  C.addLitter(S, 2, '2026-11-10'); assert.strictEqual(S.island.newLitter.length, 5); assert.strictEqual(C.cleanDays(S, '2026-11-20'), 0);
+  S.island.litter = S.island.newLitter.map((k, i) => ({ k, x: i, y: 1 })); S.island.newLitter = [];
+  while (S.island.litter.length) C.clearLitter(S, 0, '2026-11-11');
+  assert.strictEqual(S.island.cleanFrom, '2026-11-11'); assert.strictEqual(C.cleanDays(S, '2026-11-18'), 7);
+});
+t('금 물뿌리개: 한 번에 모든 나무', () => {
+  const S = C.defaultState(); S.island.tools.can = 3; S.player.hp = 50;
+  S.island.trees[0] = { kind: 'cherry', g: 0 }; S.island.trees[2] = { kind: 'pear', g: 1 };
+  const r = C.waterAll(S, 'd'); assert.strictEqual(r.n, 2); assert.strictEqual(S.player.hp, 47);
+});
 console.log(fails ? `\n${fails}개 실패` : '\n전부 통과');
 process.exit(fails ? 1 : 0);
