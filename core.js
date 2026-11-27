@@ -348,11 +348,22 @@
     { id: 'crown', name: '작은 왕관', price: 5000 }, { id: 'cat', name: '고양이 귀 머리띠', price: 900 }, { id: 'bow', name: '분홍 리본', price: 600 },
     { id: 'frog', name: '개구리 모자', price: 1200 },
   ];
-  const CLOTHES = { top: TOPS, bottom: BOTTOMS, hat: HATS };
+  // 원피스: 입으면 상의·하의 위에 덮어 그린다. 잠수복을 입으면 바다에서 헤엄칠 수 있다(★2 해변 이후)
+  const DRESSES = [
+    { id: 'white', name: '하얀 원피스', price: 800 }, { id: 'flower', name: '꽃무늬 원피스', price: 1200 },
+    { id: 'gingham', name: '체크 원피스', price: 1000 }, { id: 'sailor', name: '세일러 원피스', price: 1500 },
+    { id: 'overall', name: '멜빵 원피스', price: 900 }, { id: 'frill', name: '분홍 프릴 원피스', price: 1300 },
+    { id: 'star', name: '별빛 드레스', price: 4000 }, { id: 'lemon', name: '레몬 원피스', price: 900 },
+    { id: 'wetsuit', name: '잠수복', price: 2000, swim: true },
+  ];
+  const CLOTHES = { top: TOPS, bottom: BOTTOMS, hat: HATS, dress: DRESSES };
+  const canSwim = (S) => (S.island.stars || 1) >= 2 && (S.island.outfit || {}).dress === 'wetsuit';
   function wardrobe(S) {
     const I = S.island;
     I.wardrobe = I.wardrobe || { top: ['basic'], bottom: ['basic'], hat: [] };
+    I.wardrobe.dress = I.wardrobe.dress || [];
     I.outfit = I.outfit || { top: 'basic', bottom: 'basic', hat: null };
+    if (!('dress' in I.outfit)) I.outfit.dress = null;
     return I.wardrobe;
   }
   const owns = (S, slot, id) => wardrobe(S)[slot].includes(id);
@@ -365,7 +376,7 @@
     const kinds = Object.keys(FRUITS);
     return {
       seeds: pickN(kinds, 2).map((k) => ({ kind: k, price: FRUITS[k].sell * 4 })),
-      top: pickN(TOPS.filter((x) => x.price), 2), bottom: pickN(BOTTOMS.filter((x) => x.price), 1), hat: pickN(HATS, 1),
+      top: pickN(TOPS.filter((x) => x.price), 2), bottom: pickN(BOTTOMS.filter((x) => x.price), 1), hat: pickN(HATS, 1), dress: pickN(DRESSES.filter((x) => !x.swim), 1),
     };
   }
   function buySeed(S, kind, price) {
@@ -401,7 +412,7 @@
       fruit: {},
       maxHpBonus: 0,
       dex: { fruit: {}, fish: {}, bug: {}, fossil: {} },
-      bag: { fish: {}, bug: {}, fossil: {}, ore: {}, mush: {} },
+      bag: { fish: {}, bug: {}, fossil: {}, ore: {}, mush: {}, sea: {} },
       dug: {},
       stars: 1,
       pos: null,
@@ -488,7 +499,7 @@
     if (x < 0.55) { const k = Object.keys(FRUITS)[Math.floor(rng() * 6)]; S.island.seeds[k] = (S.island.seeds[k] || 0) + 1; return { what: 'seed', kind: k, text: `${FRUITS[k].name} 씨앗` }; }
     if (x >= 0.8 && x < 0.9) {
       const slots = ['top', 'bottom', 'hat'], pool = [];
-      for (const sl of slots) for (const it of CLOTHES[sl]) if (it.price && it.id !== 'crown' && it.id !== 'gold' && !owns(S, sl, it.id)) pool.push([sl, it]);
+      for (const sl of slots.concat('dress')) for (const it of CLOTHES[sl]) if (it.price && !['crown', 'gold', 'star', 'wetsuit'].includes(it.id) && !owns(S, sl, it.id)) pool.push([sl, it]);
       if (pool.length) { const [sl, it] = pool[Math.floor(rng() * pool.length)]; wardrobe(S)[sl].push(it.id); return { what: 'clothes', slot: sl, id: it.id, text: `${it.name}!` }; }
     }
     if (x < 0.9) { const c = 100 + Math.floor(rng() * 5) * 50; S.player.coins += c; return { what: 'coins', coins: c, text: `코인 주머니 (+${c})` }; }
@@ -534,6 +545,23 @@
     I.bag.mush = I.bag.mush || {}; I.bag.mush[m.id] = (I.bag.mush[m.id] || 0) + 1;
     return { ok: true, id: m.id, m };
   }
+  // 잠수: 거품이 오르는 곳에서 HP 5. 바닷고기(도감) 55%, 바다 보물 42%, 럭키 3%
+  const DIVE_HP = 5;
+  function dive(S, date, spotKey, when = new Date(), rng = Math.random) {
+    if (!canSwim(S)) return { err: '잠수복을 입어야 해요' };
+    const I = S.island; I.dove = I.dove || {}; I.dove[date] = I.dove[date] || [];
+    if (I.dove[date].includes(spotKey)) return { err: '이미 잠수한 곳이에요' };
+    const e = spend(S, DIVE_HP); if (e) return { err: e };
+    I.dove[date].push(spotKey);
+    for (const k of Object.keys(I.dove)) if (k < addDays(date, -3)) delete I.dove[k];
+    const x = rng();
+    if (x < 0.55) { const sp = D().pick(D().fishPool('sea', when), rng, luckBonus(S)); if (sp) return { ok: true, type: 'catch', sp, ...addCatch(S, sp, date) }; }
+    if (x < 0.97) {
+      const pool = Object.entries(D().SEALOOT).map(([id, m]) => ({ id, ...m })), m = D().pick(pool, rng, luckBonus(S));
+      I.bag.sea = I.bag.sea || {}; I.bag.sea[m.id] = (I.bag.sea[m.id] || 0) + 1; return { ok: true, type: 'sea', id: m.id, m };
+    }
+    return { ok: true, type: 'lucky', ...lucky(S, rng) };
+  }
   // 곤충: 다가갈 때 도망칠 확률은 희귀할수록 높고, 휘두를 때 HP를 쓴다.
   const NET_HIT = [0, 0.9, 0.8, 0.65, 0.5, 0.4];
   const FLEE = [0, 0.02, 0.04, 0.07, 0.1, 0.13]; // 다가가는 동안 0.25초마다
@@ -547,7 +575,7 @@
   const fleeChance = (S, r) => FLEE[r] * [1, 1, 0.8, 0.6][tier(S, 'net')];
   function sellItem(S, cat, id, n = 1) {
     const bag = S.island.bag[cat]; n = Math.min(n, bag[id] || 0); if (n <= 0) return { err: '없어요' };
-    const price = cat === 'ore' ? D().ORES[id].sell : cat === 'mush' ? D().MUSH[id].sell : D().BY_ID[id].sell;
+    const price = cat === 'ore' ? D().ORES[id].sell : cat === 'mush' ? D().MUSH[id].sell : cat === 'sea' ? D().SEALOOT[id].sell : D().BY_ID[id].sell;
     bag[id] -= n; if (!bag[id]) delete bag[id];
     S.player.coins += price * n; return { ok: true, coins: price * n };
   }
@@ -679,7 +707,7 @@
     R, maxHp, MISS_HP, CHURCH_HP, BASE_MAX_HP,
     TOOLS, TIER_NAME, TOOL_PRICE, TOOL_INFO, tier, cost, buyTool, waterAll, fleeChance, TOPS, BOTTOMS, HATS, CLOTHES, wardrobe, owns, wear, shopToday, buySeed, buyClothes,
     addLitter, clearLitter, cleanDays, VILLAGERS, V_BY, villagersHere, villagerHelp, talk, FRIEND_GIFT, checkArrivals, extraDigSpots,
-    addCatch, lucky, dig, pickMush, digResult, castLine, landFish, swingNet, FLEE, NET_HIT, sellItem, eatFish, dexCount, STAR_RULES, computeStars, checkStars,
+    addCatch, lucky, dig, pickMush, dive, DIVE_HP, canSwim, DRESSES, digResult, castLine, landFish, swingNet, FLEE, NET_HIT, sellItem, eatFish, dexCount, STAR_RULES, computeStars, checkStars,
     FRUITS, COST, PLOTS, GROW_DAYS, defaultIsland, treeStage, plant, water, harvest, growTrees, eat, sell, heal,
     SUBJECTS, SUBJECT_BY_WD, questsFor, isComplete, defaultState, dayRec, qRec,
     reward, damage, checkAllClear, settle, makeupList, completeMakeup,

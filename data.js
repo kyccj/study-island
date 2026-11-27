@@ -334,6 +334,11 @@
     king: { name: '새송이버섯', r: 2, sell: 70, m: null }, chanterelle: { name: '꾀꼬리버섯', r: 3, sell: 250, m: [[6, 9]] },
     matsutake: { name: '송이버섯', r: 4, sell: 900, m: [[9, 10]] }, rainbow: { name: '무지개버섯', r: 5, sell: 2500, m: null },
   };
+  // 잠수로 얻는 바다 보물
+  const SEALOOT = {
+    clam: { name: '가리비', r: 1, sell: 40 }, conch: { name: '소라', r: 2, sell: 80 },
+    abalone: { name: '전복', r: 3, sell: 350 }, pearl: { name: '진주', r: 4, sell: 1500 },
+  };
   const LIST = { fish: FISH, bug: BUGS, fossil: FOSSILS };
   const BY_ID = {}; for (const c of Object.keys(LIST)) for (const s of LIST[c]) BY_ID[s.id] = s;
   const CAT_NAME = { fish: '물고기', bug: '곤충', fossil: '화석' };
@@ -360,5 +365,5 @@
   const hoursText = (sp) => !sp.h ? '하루 종일' : `${sp.h[0]}시~${sp.h[1] === 24 ? 24 : sp.h[1]}시`;
   const LOC_NAME = { pond: '연못', sea: '바다', flower: '꽃밭', meadow: '풀밭', ground: '땅 위', water: '물가', tree: '나무', forest: '숲', dig: '빛나는 땅' };
 
-  G.Data = { FISH, BUGS, FOSSILS, ORES, MUSH, LIST, BY_ID, CAT_NAME, LOC_NAME, available, pick, fishPool, bugPool, monthsText, hoursText, RARITY_W };
+  G.Data = { FISH, BUGS, FOSSILS, ORES, MUSH, SEALOOT, LIST, BY_ID, CAT_NAME, LOC_NAME, available, pick, fishPool, bugPool, monthsText, hoursText, RARITY_W };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -250,5 +250,15 @@ t('버섯: 하루에 그 자리 한 번, 가방에 들어가고 팔 수 있음',
   const c0 = S.player.coins; assert.ok(C.sellItem(S, 'mush', r.id).ok); assert.strictEqual(S.player.coins, c0 + D.MUSH[r.id].sell);
   assert.ok(!Object.values(Array.from({ length: 200 }, () => C.pickMush(S, 'x' + Math.random(), 'k', new Date(2026, 1, 1)))).some((x) => x.id === 'matsutake'));
 });
+t('원피스·잠수복: 잠수복은 ★2부터 헤엄, 잠수는 HP 5', () => {
+  const S = C.defaultState(); S.player.coins = 5000; S.player.hp = 50;
+  assert.ok(C.buyClothes(S, 'dress', 'wetsuit').ok); assert.ok(C.wear(S, 'dress', 'wetsuit').ok);
+  assert.ok(!C.canSwim(S)); assert.ok(C.dive(S, 'd', 'k').err);
+  S.island.stars = 2; assert.ok(C.canSwim(S));
+  const r = C.dive(S, 'd', 'k', new Date(2026, 6, 1), () => 0.7); assert.strictEqual(r.type, 'sea'); assert.strictEqual(S.player.hp, 45);
+  assert.ok(C.dive(S, 'd', 'k').err);
+  assert.ok(C.sellItem(S, 'sea', r.id).ok);
+  assert.strictEqual(C.shopToday('2026-11-29').dress.length, 1); assert.ok(!C.shopToday('2026-11-29').dress[0].swim);
+});
 console.log(fails ? `\n${fails}개 실패` : '\n전부 통과');
 process.exit(fails ? 1 : 0);

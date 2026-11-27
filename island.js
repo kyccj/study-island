@@ -2,7 +2,7 @@
 // 그림은 assets/a (Codex로 만든 오리지널 파스텔 픽셀아트), 바닥은 코드로 그린다. 게임 규칙 판정은 hooks로 app.js에 맡긴다.
 (function (G) {
   'use strict';
-  const T = 16, W = 24, H = 36;
+  const T = 16, W = 24, H = 41; // 아래쪽 바다를 넓혀 헤엄칠 자리
 
   // ───────── 그림 불러오기 ─────────
   const IMG = {};
@@ -120,7 +120,7 @@
   function rgb2h(r, g, b) { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 510, d = (mx - mn) / 255; if (!d) return [0, 0, l]; const s = d / (1 - Math.abs(2 * l - 1)); let h = mx === r ? ((g - b) / (mx - mn)) % 6 : mx === g ? (b - r) / (mx - mn) + 2 : (r - g) / (mx - mn) + 4; return [(h * 60 + 360) % 360, s, l]; }
   const hex = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
   function dressSheet(S) {
-    const o = S.island.outfit || {}, k = JSON.stringify(o) + (o.hat && hatImg[o.hat] && hatImg[o.hat].width ? 1 : 0);
+    const o = S.island.outfit || {}, k = JSON.stringify(o) + (o.hat && hatImg[o.hat] && hatImg[o.hat].width ? 1 : 0) + (o.dress && hatImg['dress_' + o.dress] && hatImg['dress_' + o.dress].width ? 2 : 0);
     if (dressed && k === dressKey) return dressed;
     const src = IMG.player; if (!src || !src.width) return null;
     const fw = src.width / 3, fh = src.height / 5, c = document.createElement('canvas'); c.width = src.width; c.height = (fh + HEAD) * 5;
@@ -149,6 +149,18 @@
         const kk = Math.min(1.15, l / base); a[i] = Math.min(255, t[0] * kk); a[i + 1] = Math.min(255, t[1] * kk); a[i + 2] = Math.min(255, t[2] * kk);
       }
       g.putImageData(im, 0, 0);
+    }
+    if (o.dress) {
+      const key2 = 'dress_' + o.dress;
+      if (!hatImg[key2]) { hatImg[key2] = new Image(); hatImg[key2].onload = () => { dressKey = ''; }; hatImg[key2].src = `assets/a/dressw_${o.dress}.png`; }
+      const di = hatImg[key2];
+      // 줄마다 몸통 가운데 x와 어깨 y(그림 화소): 아래·위·왼쪽·오른쪽·행동
+      const BODY = [[17.5, 32], [17.5, 32], [16, 32], [18.5, 32], [17.5, 32]];
+      if (di.width) for (let r = 0; r < 5; r++) for (let col = 0; col < 3; col++) {
+        const [cx, ty] = BODY[r], view = r === 1 ? 2 : r === 2 || r === 3 ? 1 : 0, flip = r === 3;
+        g.save(); g.translate(col * fw + cx, 0); if (flip) g.scale(-1, 1);
+        g.drawImage(di, view * 24, 0, 24, 20, -12, r * (fh + HEAD) + HEAD + ty, 24, 20); g.restore();
+      }
     }
     if (o.hat) {
       if (!hatImg[o.hat]) { hatImg[o.hat] = new Image(); hatImg[o.hat].onload = () => { dressKey = ''; }; hatImg[o.hat].src = `assets/a/hatw_${o.hat}.png`; }
@@ -230,6 +242,7 @@
   let blocked = new Set(), stars = 1;
   function buildBlocked(S) {
     stars = S.island.stars || 1;
+    swimOn = G.Core.canSwim(S);
     blocked = new Set();
     for (let x = POND.x0; x <= POND.x1; x++) for (let y = POND.y0; y <= POND.y1; y++) blocked.add(key(x, y));
     for (const b of [HOUSE, SHOP, MUSEUM]) for (let x = b.x; x < b.x + b.w; x++) for (let y = b.y; y < b.y + b.h; y++) blocked.add(key(x, y));
@@ -237,7 +250,9 @@
     FOREST.forEach(([x, y]) => blocked.add(key(x, y)));
   }
   const zoneOpen = (x, y) => !(y >= BEACH_Y && stars < 2) && !(inRect(x, y, FOREST_R) && stars < 3);
-  const walkable = (x, y) => x >= 2 && x <= 21 && y >= 2 && y <= 32 && !blocked.has(key(x, y)) && zoneOpen(x, y);
+  let swimOn = false;
+  const isWater = (x, y) => x >= 0 && x < W && y >= 26 && y <= H - 2 && !inRect(x, y, GRASS) && !(x >= 2 && x <= 21 && y <= 32);
+  const walkable = (x, y) => (x >= 2 && x <= 21 && y >= 2 && y <= 32 && !blocked.has(key(x, y)) && zoneOpen(x, y)) || (swimOn && isWater(x, y));
   function path(sx, sy, tx, ty) {
     if (!walkable(tx, ty)) return null;
     const prev = new Map([[key(sx, sy), null]]), q = [[sx, sy]];
@@ -337,6 +352,17 @@
     while (spots.length < n && cand.length) { const i = Math.floor(r() * cand.length); spots.push(cand.splice(i, 1)[0]); }
     spotsDate = date + stars + ex;
     return spots;
+  }
+
+  // ───────── 오늘의 잠수 자리(거품) ─────────
+  let diveDate = null, dives = [];
+  function diveSpots(date) {
+    if (diveDate === date) return dives;
+    let h = 7; for (const ch of date) h = (h * 41 + ch.charCodeAt(0)) % 2147483647;
+    let s = h || 1; const r = () => ((s = (s * 48271) % 2147483647) / 2147483647);
+    const cand = []; for (let y = 35; y <= H - 3; y++) for (let x = 1; x <= W - 2; x++) cand.push([x, y]);
+    dives = []; while (dives.length < 3) dives.push(cand.splice(Math.floor(r() * cand.length), 1)[0]);
+    diveDate = date; return dives;
   }
 
   // ───────── 오늘의 버섯 자리(가을엔 더 많이) ─────────
@@ -468,6 +494,8 @@
     }
     for (const [b, type] of [[HOUSE, 'house'], [SHOP, 'shop'], [MUSEUM, 'museum']]) if (tx >= b.x && tx < b.x + b.w && ty >= b.y && ty < b.y + b.h) return { type, stand: b.stand, face: 1 };
     if (inRect(tx, ty, POND)) return { type: 'pond' };
+    if (swimOn) for (const [x, y] of diveSpots(hooks.today())) if (tx === x && ty === y && !hooks.isDove(key(x, y))) return { type: 'dive', x, y };
+    if (swimOn && isWater(tx, ty)) return { type: 'swim' };
     if (ty >= 33 || tx < 1 || tx > 22 || ty < 1) return { type: 'sea' };
     if (ty >= BEACH_Y && stars < 2) return { type: 'locked', need: 2 };
     if (inRect(tx, ty, FOREST_R) && stars < 3) return { type: 'locked', need: 3 };
@@ -541,6 +569,13 @@
         const cy = Math.min(POND.y1 - 0.5, Math.max(POND.y0 + 1.5, st[1] + 0.5 + Math.sign((POND.y0 + POND.y1 + 1) / 2 - st[1] - 0.5) * 2));
         hooks.tryFish('pond', () => startFishing('pond', cx * T, cy * T));
       });
+      return;
+    }
+    if (obj && obj.type === 'swim') { if (!walkThen([tx, ty], null)) addRing(wx, wy, '#ff6b6b'); else addRing(wx, wy, '#ffffff'); return; }
+    if (obj && obj.type === 'dive') {
+      addRing(obj.x * T + 8, obj.y * T + 8, '#bff4ff');
+      walkThen([obj.x, obj.y], () => { P.act = 0.9; P.diving = 0.9; for (let k = 0; k < 14; k++) fx.push({ k: 'drop', x: P.x + 8 + (Math.random() - 0.5) * 16, y: P.y + 8, vy: -50 - Math.random() * 40, t: 0, life: 0.6 });
+        setTimeout(() => hooks.dive(key(obj.x, obj.y), obj.x * T + 8, obj.y * T + 8), 700); });
       return;
     }
     if (obj && obj.type === 'sea') {
@@ -641,6 +676,7 @@
 
     // 이동 (곤충에 가까워지면 살금살금, 그동안 도망 판정)
     if (P.act > 0) P.act -= dt;
+    if (P.diving > 0) P.diving -= dt;
     if (P.path.length) {
       const ch = P.chase;
       if (ch && ch.gone) { P.path = []; P.onArrive = null; P.chase = null; }
@@ -673,6 +709,11 @@
     drawFoam(time);
     if (!groundCv) groundCv = buildGround();
     ctx.drawImage(groundCv, 0, 0, W * T, H * T);
+    if (swimOn) for (const [x, y] of diveSpots(today)) if (!hooks.isDove(key(x, y))) {
+      ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 0.7;
+      for (let k = 0; k < 4; k++) { const ph = (time * 0.9 + k / 4) % 1; ctx.beginPath(); ctx.arc(x * T + 8 + Math.sin(k * 2 + time * 2) * 3, y * T + 12 - ph * 10, 0.8 + ph * 1.6, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.beginPath(); ctx.ellipse(x * T + 8, y * T + 12, 6 + Math.sin(time * 3) * 1, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    }
     // 연못 반짝임
     ctx.fillStyle = 'rgba(255,255,255,.6)';
     for (const [x, y, p] of [[16.2, 4.5, 0], [18.6, 6.2, 2], [17.1, 7.6, 4]]) { const k = (Math.sin(time * 1.5 + p) + 1) / 2; ctx.fillRect(x * T, y * T, 3 + k * 3, 0.6); }
@@ -701,12 +742,17 @@
     PLOTS.forEach(([, y], i) => items.push({ y: y * T + 15, draw: () => drawTree(i, S.island.trees[i], time, today) }));
     bugs.forEach((b) => items.push({ y: b.mode === 'fly' ? b.hy + 8 : b.y + 4, draw: () => drawBug(b, time, night > 0.2) }));
     items.push({ y: P.y + 15.5, draw: () => {
-      ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(P.x + 8, P.y + 15, 5, 2, 0, 0, Math.PI * 2); ctx.fill();
+      const [ptx, pty] = ptile(), inWater = swimOn && isWater(ptx, pty) && !inRect(ptx, pty, SAND); // 모래 가장자리는 걷고, 그 밖은 헤엄
+      if (!inWater) { ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(P.x + 8, P.y + 15, 5, 2, 0, 0, Math.PI * 2); ctx.fill(); }
+      ctx.save();
+      if (inWater) { const sink = P.diving > 0 ? Math.min(14, (0.9 - P.diving) * 30) : 0; ctx.beginPath(); ctx.rect(P.x - 20, P.y - 40, 56, 49); ctx.clip(); ctx.translate(0, 4 + sink); }
       // 그림 칸: 줄 0 아래 1 위 2 왼쪽 3 오른쪽 4 행동(낚시·잠자리채·삽), 칸 0 서기 1·2 걷기
       const pose = fishing ? [4, 0] : P.act > 0 ? [4, P.actKind || 0] : P.path.length ? [P.dir, [1, 0, 2, 0][Math.floor(P.anim) % 4]] : [P.dir, 0];
       const sheet = dressSheet(S) || IMG.player;
       const pw = sheet.width / 3, ph = sheet.height / 5, bob = P.path.length && Math.floor(P.anim) % 2 ? -0.5 : 0;
       ctx.drawImage(sheet, pose[1] * pw, pose[0] * ph, pw, ph, Math.round((P.x + 8 - pw / 4) * 2) / 2, P.y + 15.5 - ph / 2 + bob, pw / 2, ph / 2); // 그림마다 발끝이 칸 맨 아래
+      ctx.restore();
+      if (inWater) { ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.ellipse(P.x + 8, P.y + 9.5, 7 + Math.sin(now * 4), 2.2, 0, 0, Math.PI * 2); ctx.stroke(); }
       if (P.sneak) { ctx.font = '6px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText('살금…', P.x + 8, P.y - 10); }
     } });
     items.sort((a, b) => a.y - b.y).forEach((it) => it.draw());
@@ -755,5 +801,5 @@
   function stop() { running = false; fishing = null; }
 
   G.Island = { init, start, stop, tapWorld, redress, syncVillagers, zoomStep, ZOOMS, floatText, splash, pop, dust, sparkle, resize, PLOTS, IMG, ready, player: P,
-    _debug: { mush: () => mushSpots(hooks.today()), vill: () => vill, bugs: () => bugs, fishing: () => fishing, spots: () => spots, spawn: (sp, x, y) => bugs.push({ sp, x, y, hx: x, hy: y, ph: 0, mode: FLY.has(sp.art[0]) ? 'fly' : STILL.has(sp.art[0]) ? 'still' : 'crawl', gone: false, t: 0 }) } };
+    _debug: { dive: () => diveSpots(hooks.today()), mush: () => mushSpots(hooks.today()), vill: () => vill, bugs: () => bugs, fishing: () => fishing, spots: () => spots, spawn: (sp, x, y) => bugs.push({ sp, x, y, hx: x, hy: y, ph: 0, mode: FLY.has(sp.art[0]) ? 'fly' : STILL.has(sp.art[0]) ? 'still' : 'crawl', gone: false, t: 0 }) } };
 })(window);

@@ -201,15 +201,15 @@
       const have = Object.entries(I.bag[cat] || {}).filter(([, n]) => n > 0);
       if (!have.length) return '';
       return `<div class="card"><h3>${title}</h3><div class="grid">${have.map(([id, n]) => {
-        const sp = cat === 'ore' ? D.ORES[id] : cat === 'mush' ? D.MUSH[id] : D.BY_ID[id];
-        const img = cat === 'ore' ? `assets/${sp.icon}.png` : cat === 'mush' ? `assets/a/mush_${id}.png` : iconOf(sp);
+        const sp = cat === 'ore' ? D.ORES[id] : cat === 'mush' ? D.MUSH[id] : cat === 'sea' ? D.SEALOOT[id] : D.BY_ID[id];
+        const img = cat === 'ore' ? `assets/${sp.icon}.png` : cat === 'mush' ? `assets/a/mush_${id}.png` : cat === 'sea' ? `assets/a/sea_${id}.png` : iconOf(sp);
         return `<div class="slot ${cat !== 'ore' ? 'r' + sp.r : ''}"><img src="${img}" class="px icon"><b class="cnt">${n}</b><div class="slot-name">${esc(sp.name)}</div>
           <div class="slot-btns">${eat ? `<button class="btn xs" data-act="eatFish" data-id="${id}">먹기 +${sp.hp}❤️</button>` : ''}
           <button class="btn xs gold" data-act="sellItem" data-cat="${cat}" data-id="${id}">팔기 ${sp.sell}</button></div></div>`;
       }).join('')}</div><button class="btn wide gold" data-act="sellCat" data-cat="${cat}">전부 팔기</button></div>`;
     };
-    html += sec('🐟 물고기', 'fish', D.FISH, true) + sec('🦋 곤충', 'bug', D.BUGS) + sec('🦴 화석', 'fossil', D.FOSSILS) + sec('🍄 버섯', 'mush') + sec('💎 광물', 'ore');
-    if (!['fish', 'bug', 'fossil', 'ore', 'mush'].some((c) => Object.keys(I.bag[c] || {}).length)) html += `<div class="card"><p class="muted">연못에서 낚시, 꽃밭에서 곤충 잡기, 반짝이는 땅 파기로 채워 보세요!</p></div>`;
+    html += sec('🐟 물고기', 'fish', D.FISH, true) + sec('🦋 곤충', 'bug', D.BUGS) + sec('🦴 화석', 'fossil', D.FOSSILS) + sec('🍄 버섯', 'mush') + sec('🐚 바다 보물', 'sea') + sec('💎 광물', 'ore');
+    if (!['fish', 'bug', 'fossil', 'ore', 'mush', 'sea'].some((c) => Object.keys(I.bag[c] || {}).length)) html += `<div class="card"><p class="muted">연못에서 낚시, 꽃밭에서 곤충 잡기, 반짝이는 땅 파기로 채워 보세요!</p></div>`;
     return html;
   }
 
@@ -534,7 +534,8 @@
     buySeed: (ds) => { const r = C.buySeed(S, ds.k, +ds.p); if (r.err) return toast(r.err); save(); renderHud(); shopSheet(); toast(`🌱 ${C.FRUITS[ds.k].name} 씨앗을 샀어요`); },
     buyClothes: (ds) => { const r = C.buyClothes(S, ds.s, ds.id); if (r.err) return toast(r.err); save(); renderHud(); shopSheet();
       if (confirm(`${r.it.name}! 지금 입어 볼까요?`)) { C.wear(S, ds.s, ds.id); save(); window.Island.redress(); } },
-    wear: (ds) => { const r = C.wear(S, ds.s, ds.id || null); if (r.err) return toast(r.err); save(); window.Island.redress(); closetSheet(); },
+    wear: (ds) => { const r = C.wear(S, ds.s, ds.id || null); if (r.err) return toast(r.err); save(); window.Island.redress(); closetSheet();
+      if (ds.id === 'wetsuit') toast((S.island.stars || 1) >= 2 ? '🤿 바다로 걸어 들어가 보세요! 거품 나는 곳을 누르면 잠수해요' : '🤿 ★2 해변이 열리면 헤엄칠 수 있어요'); },
     zoom: (ds) => { const n = window.Island.zoomStep(+ds.d); S.settings.zoom = n; save(); toast(`🔍 가로 ${n}칸 보기`); },
     cardOk: () => { cardQueue.shift(); if (cardQueue.length) nextCard(); else { $('#modal').hidden = true; render(); } },
     dexCat: (ds) => { dexCat = ds.k; render(); },
@@ -653,7 +654,7 @@
   // ───────── 상점·옷장 ─────────
   let shopTab = 'tool', closetTab = 'top';
   const clothIcon = (slot, id) => `assets/a/${slot}_${id}.png`;
-  const SLOT_NAME = { top: '상의', bottom: '하의', hat: '모자' };
+  const SLOT_NAME = { top: '상의', bottom: '하의', hat: '모자', dress: '원피스' };
   function shopSheet() {
     const d = today(), sh = C.shopToday(d), coins = S.player.coins;
     const tabs = [['tool', '🛠️ 도구'], ['seed', '🌱 씨앗'], ['cloth', '👕 옷']];
@@ -665,11 +666,14 @@
           ${nx <= 3 ? `<p class="small">→ <b>${C.TIER_NAME[nx]} ${name}</b>: ${C.TOOL_INFO[k][nx]}</p>` : '<p class="small gold-t">최고 등급!</p>'}</div>
           ${nx <= 3 ? `<button class="btn primary" data-act="buyTool" data-k="${k}" ${coins < C.TOOL_PRICE[nx] ? 'disabled' : ''}>${COIN}${C.TOOL_PRICE[nx]}</button>` : ''}</div>`;
       }).join('');
+      const ws = C.DRESSES.find((x) => x.swim), wsOwn = C.owns(S, 'dress', 'wetsuit'), beach = (S.island.stars || 1) >= 2;
+      body += `<div class="shop-row"><img src="${clothIcon('dress', 'wetsuit')}" class="px icon"><div class="grow"><b>잠수복</b><p class="muted small">입으면 바다에서 헤엄치고, 거품 나는 곳에서 잠수해요 (HP ${C.DIVE_HP}). 입은 동안엔 바다낚시 대신 수영해요.</p></div>
+        ${wsOwn ? '<span class="muted small">가지고 있음</span>' : beach ? `<button class="btn primary" data-act="buyClothes" data-s="dress" data-id="wetsuit" ${coins < ws.price ? 'disabled' : ''}>${COIN}${ws.price}</button>` : '<span class="muted small">★2 해변이 열리면</span>'}</div>`;
     } else if (shopTab === 'seed') {
       body = `<p class="muted small">오늘의 씨앗 (매일 바뀌어요)</p>` + sh.seeds.map(({ kind, price }) => `<div class="shop-row"><img src="assets/fruit-${kind}.png" class="px icon"><div class="grow"><b>${C.FRUITS[kind].name} 씨앗</b><p class="muted small">가진 씨앗 ${S.island.seeds[kind] || 0}개</p></div>
         <button class="btn primary" data-act="buySeed" data-k="${kind}" data-p="${price}" ${coins < price ? 'disabled' : ''}>${COIN}${price}</button></div>`).join('');
     } else {
-      const items = [...sh.top.map((x) => ['top', x]), ...sh.bottom.map((x) => ['bottom', x]), ...sh.hat.map((x) => ['hat', x])];
+      const items = [...sh.dress.map((x) => ['dress', x]), ...sh.top.map((x) => ['top', x]), ...sh.bottom.map((x) => ['bottom', x]), ...sh.hat.map((x) => ['hat', x])];
       body = `<p class="muted small">오늘의 옷 (매일 바뀌어요) · 산 옷은 집에서 갈아입어요</p>` + items.map(([sl, it]) => {
         const own = C.owns(S, sl, it.id);
         return `<div class="shop-row"><img src="${clothIcon(sl, it.id)}" class="px icon"><div class="grow"><b>${esc(it.name)}</b><p class="muted small">${SLOT_NAME[sl]}</p></div>
@@ -682,11 +686,11 @@
   }
   function closetSheet() {
     const w = C.wardrobe(S), o = S.island.outfit;
-    const tabs = [['top', '👕 상의'], ['bottom', '🩳 하의'], ['hat', '🎩 모자']];
+    const tabs = [['top', '👕 상의'], ['bottom', '🩳 하의'], ['dress', '👗 원피스'], ['hat', '🎩 모자']];
     const list = C.CLOTHES[closetTab].filter((it) => w[closetTab].includes(it.id));
-    const cells = (closetTab === 'hat' ? [`<button class="slot btnlike ${!o.hat ? 'on' : ''}" data-act="wear" data-s="hat" data-id=""><div class="icon none">✕</div><div class="slot-name">벗기</div></button>`] : [])
+    const cells = (closetTab === 'hat' || closetTab === 'dress' ? [`<button class="slot btnlike ${!o[closetTab] ? 'on' : ''}" data-act="wear" data-s="${closetTab}" data-id=""><div class="icon none">✕</div><div class="slot-name">벗기</div></button>`] : [])
       .concat(list.map((it) => `<button class="slot btnlike ${o[closetTab] === it.id ? 'on' : ''}" data-act="wear" data-s="${closetTab}" data-id="${it.id}"><img src="${clothIcon(closetTab, it.id)}" class="px icon"><div class="slot-name">${esc(it.name)}</div></button>`));
-    openSheet(`<h3>🏠 우리 집 · 옷장</h3><p class="muted small">상점에서 산 옷, 낚시 럭키로 얻은 옷을 입어요. 집 꾸미기는 나중에 열려요.</p>
+    openSheet(`<h3>🏠 우리 집 · 옷장</h3><p class="muted small">상점에서 산 옷, 럭키로 얻은 옷을 입어요. 원피스를 입으면 상의·하의 대신 원피스가 보여요.</p>
       <div class="seg">${tabs.map(([k, l]) => `<button class="${closetTab === k ? 'on' : ''}" data-act="closetTab" data-k="${k}">${l}<small>${w[k].length}/${C.CLOTHES[k].length}</small></button>`).join('')}</div>
       <div class="grid g4">${cells.join('')}</div><button class="btn ghost wide" data-act="closeSheet">닫기</button>`);
   }
@@ -781,6 +785,15 @@
   const islandHooks = {
     state: () => S, today, save, onTap: onIslandTap, toast,
     isDug: (k) => (S.island.dug[today()] || []).includes(k),
+    isDove: (k) => ((S.island.dove || {})[today()] || []).includes(k),
+    dive: (k, x, y) => {
+      const r = C.dive(S, today(), k); if (r.err) { toast(r.err); return; }
+      window.Island.floatText(`❤️-${C.DIVE_HP}`, '#ff8a8a', [x, y - 10]);
+      if (r.type === 'catch') catchCard(r.sp, r.first, '잠수해서 잡았다!');
+      else if (r.type === 'sea') showCard(`<div class="rays r${r.m.r}"><img class="px big-icon" src="assets/a/sea_${r.id}.png"></div><div class="stars">${STARS(r.m.r)}</div><h2>${r.m.name}${eul(r.m.name)} 주웠다!</h2><p class="muted">팔면 ${COIN}${r.m.sell}</p>`, `rare${r.m.r}`);
+      else luckyCard(r);
+      afterCatch();
+    },
     isPicked: (k) => ((S.island.picked || {})[today()] || []).includes(k),
     pickMush: (k, x, y) => {
       const r = C.pickMush(S, today(), k); if (r.err) return;
