@@ -181,5 +181,12 @@
     return (cache[sp.id] = c);
   }
   function url(sp) { const c = canvasFor(sp); return c._url || (c._url = c.toDataURL()); }
-  G.Icons = { canvasFor, url, _grid: { fish, bug, fossil } };
+  // 그림 파일(assets/ic/<id>.png)이 있으면 그것을 쓰고, 없으면 위의 코드 그림을 쓴다
+  const img = {};
+  if (G.Data && typeof Image !== 'undefined') for (const sp of [...G.Data.FISH, ...G.Data.BUGS, ...G.Data.FOSSILS]) {
+    const im = new Image(); im.onload = () => { img[sp.id] = im; }; im.src = `assets/ic/${sp.id}.png`;
+  }
+  const canvasOrImg = (sp) => img[sp.id] || canvasFor(sp);
+  const urlOf = (sp) => (img[sp.id] ? `assets/ic/${sp.id}.png` : url(sp));
+  G.Icons = { canvasFor: canvasOrImg, url: urlOf, _grid: { fish, bug, fossil } };
 })(window);

@@ -1,17 +1,22 @@
 // island.js — 섬 화면: 타일 지도, 탭해서 걷기, 과일나무, 낚시, 곤충, 땅파기, 효과.
-// 바탕 그림은 Ninja Adventure(CC0). 게임 규칙 판정은 hooks로 app.js에 맡긴다.
+// 그림은 assets/a (Codex로 만든 오리지널 파스텔 픽셀아트), 바닥은 코드로 그린다. 게임 규칙 판정은 hooks로 app.js에 맡긴다.
 (function (G) {
   'use strict';
   const T = 16, W = 24, H = 36;
 
   // ───────── 그림 불러오기 ─────────
   const IMG = {};
-  const SRC = { field: 'field', water: 'water', nature: 'nature', house: 'house', player: 'player', ripple: 'ripple',
-    cherry: 'fruit-cherry', orange: 'fruit-orange', lemon: 'fruit-lemon', pear: 'fruit-pear', banana: 'fruit-banana', grapes: 'fruit-grapes' };
+  const SPR = ['sprout', 'sapling', 'young', 'tree', 'blossom', 'forest', 'pine', 'palm', 'bush', 'mushroom', 'flower_pink', 'flower_yellow', 'flower_white', 'flower_lilac',
+    'tuft', 'stone', 'shell', 'starfish', 'weeds', 'can', 'sign', 'fence', 'post', 'lily', 'dig', 'house', 'shop', 'museum', 'player'];
+  const SRC = Object.fromEntries(SPR.map((n) => [n, 'a/' + n]));
+  for (const k of ['cherry', 'orange', 'lemon', 'pear', 'banana', 'grapes']) SRC[k] = 'a/fruit_' + k;
   const ready = Promise.all(Object.entries(SRC).map(([k, f]) => new Promise((res) => {
     const im = new Image(); im.onload = () => res(); im.onerror = () => res(); im.src = `assets/${f}.png`; IMG[k] = im;
   })));
-  const tile = (ctx, sheet, c, r, x, y, w = 1, h = 1) => ctx.drawImage(IMG[sheet], c * T, r * T, w * T, h * T, x, y, w * T, h * T);
+  // 그림 하나를 가운데 아래(cx, by) 기준으로 그린다. 그림 2화소 = 세계 1단위
+  const spr = (n, cx, by, flip) => { const im = IMG[n]; if (!im || !im.width) return; const w = im.width / 2, h = im.height / 2;
+    if (flip) { ctx.save(); ctx.translate(Math.round(cx * 2) / 2, 0); ctx.scale(-1, 1); ctx.drawImage(im, -w / 2, by - h, w, h); ctx.restore(); }
+    else ctx.drawImage(im, Math.round((cx - w / 2) * 2) / 2, Math.round((by - h) * 2) / 2, w, h); };
 
   // ───────── 섬 배치 (타일 좌표) ─────────
   const GRASS = { x0: 1, y0: 1, x1: 22, y1: 27 };
@@ -24,12 +29,92 @@
   const FOREST_R = { x0: 15, y0: 12, x1: 21, y1: 23 };
   const FOREST = [[17, 14], [20, 14], [16, 18], [19, 18], [21, 22], [17, 22]];
   const BEACH_Y = 28; // 이 줄부터 해변(★2)
-  const FLOWERS = [[0, 11], [1, 11], [3, 11], [6, 11]];
+  const FLOWERS = ['flower_pink', 'flower_yellow', 'flower_white', 'flower_lilac'];
+  const BEACH_DECO = [[3, 30, 'shell'], [8, 32, 'starfish'], [14, 29, 'shell'], [19, 31, 'starfish'], [11, 33, 'shell']];
+  const PALMS = [[1, 29], [22, 31], [1, 33]];
+
+  // ───────── 바닥 (코드로 그리는 파스텔 픽셀 바닥, 1칸 = 32 화소) ─────────
+  const D = 2; // 바닥·그림 화소 밀도: 세계 1단위에 2화소
+  const PAL = {
+    grass: [174, 211, 140], grassL: [190, 222, 152], grassD: [146, 192, 112], rim: [125, 172, 96], line: [104, 146, 84],
+    sand: [253, 227, 189], sandD: [240, 207, 160], cliff: [239, 184, 149], cliffD: [214, 150, 118], cliffL: [248, 204, 172], out: [155, 112, 107],
+    stone: [214, 205, 196], stoneD: [176, 164, 156], pond: [120, 209, 196], pondD: [96, 190, 180], pondL: [168, 230, 220],
+  };
+  const hash = (x, y) => { let h = (x * 374761393 + y * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  function vnoise(x, y) {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, s = (t) => t * t * (3 - 2 * t);
+    const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
+    return a + (b - a) * s(xf) + (c - a) * s(yf) + (a - b - c + d) * s(xf) * s(yf);
+  }
+  // 둥근 사각형까지의 거리(안쪽은 음수), 단위는 화소
+  function sdRect(px, py, R, rad) {
+    const x0 = R.x0 * T * D, y0 = R.y0 * T * D, x1 = (R.x1 + 1) * T * D, y1 = (R.y1 + 1) * T * D;
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, hx = (x1 - x0) / 2 - rad, hy = (y1 - y0) / 2 - rad;
+    const qx = Math.abs(px - cx) - hx, qy = Math.abs(py - cy) - hy;
+    return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - rad;
+  }
+  const CLIFF = 22; // 잔디섬 아래 절벽 높이(화소)
+  let groundCv = null;
+  function buildGround() {
+    const gw = W * T * D, gh = H * T * D, c = document.createElement('canvas'); c.width = gw; c.height = gh;
+    const g = c.getContext('2d'), img = g.createImageData(gw, gh), a = img.data;
+    const put = (i, col) => { a[i] = col[0]; a[i + 1] = col[1]; a[i + 2] = col[2]; a[i + 3] = 255; };
+    const gBot = (GRASS.y1 + 1) * T * D;
+    for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+      const i = (y * gw + x) * 4, wob = (vnoise(x / 22, y / 22) - 0.5) * 7;
+      const dg = sdRect(x, y, GRASS, 26) + wob, ds = sdRect(x, y, SAND, 30) + wob * 0.8, dp = sdRect(x, y, POND, 18) + (vnoise(x / 9 + 50, y / 9) - 0.5) * 4;
+      // 절벽: 잔디섬 바로 아래 띠
+      const dCliff = sdRect(x, y - CLIFF, GRASS, 26) + (vnoise(x / 22, (y - CLIFF) / 22) - 0.5) * 7;
+      if (dg <= 0) {
+        if (dp <= -7) { // 연못 물
+          const sh = dp > -12 ? PAL.pondD : (hash(x >> 2, y >> 1) < 0.02 ? PAL.pondL : PAL.pond); put(i, sh);
+        } else if (dp <= 0) { // 연못 돌 테두리
+          const st = hash((x + 3) >> 3, (y + 1) >> 3); put(i, dp > -1.2 || dp < -6 ? PAL.out : st < 0.5 ? PAL.stone : PAL.stoneD);
+        } else if (dg > -1.6) put(i, PAL.line);
+        else if (dg > -4) put(i, PAL.rim);
+        else {
+          const n = vnoise(x / 40, y / 40), hh = hash(x >> 1, y >> 1);
+          let col = n > 0.62 ? PAL.grassL : PAL.grass;
+          // 풀잎 무늬: 작은 V
+          const tx = x % 28, ty = y % 26, cell = hash(Math.floor(x / 28), Math.floor(y / 26));
+          if (cell < 0.45) { const ox = 6 + Math.floor(cell * 30) % 14, oy = 8 + Math.floor(cell * 70) % 10, dx = tx - ox, dy = ty - oy; if (dy >= 0 && dy < 4 && (Math.abs(dx) === 3 - dy || (dx === 0 && dy >= 1))) col = PAL.grassD; }
+          else if (hh < 0.006) col = PAL.grassD;
+          put(i, col);
+        }
+      } else if (dCliff <= 0 && y >= gBot - 40) { // 절벽 면
+        const v = vnoise(x / 6, 3); let col = PAL.cliff;
+        if (dCliff > -1.6) col = PAL.out; else if (dCliff > -4) col = PAL.cliffD;
+        else if ((x + Math.floor(v * 8)) % 18 < 2) col = PAL.cliffD; else if (y % 11 === 0 && hash(x >> 3, y) < 0.5) col = PAL.cliffL;
+        put(i, col);
+      } else if (ds <= 0) {
+        put(i, ds > -1.6 ? PAL.sandD : hash(x, y) < 0.012 ? PAL.sandD : PAL.sand);
+      }
+    }
+    g.putImageData(img, 0, 0);
+    return c;
+  }
+  // 바다: 매 프레임 물결 무늬
+  function drawSea(x0, y0, x1, y1, time) {
+    ctx.fillStyle = '#80d2c0'; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    ctx.fillStyle = 'rgba(255,255,255,.35)';
+    for (let y = Math.floor(y0 / 12) * 12; y < y1; y += 12) for (let x = Math.floor(x0 / 24) * 24; x < x1; x += 24) {
+      const h = hash(x / 24, y / 12); if (h > 0.45) continue;
+      const ox = (h * 97) % 18 + Math.sin(time * 0.8 + h * 20) * 2;
+      ctx.fillRect(x + ox, y + 4, 6, 1); ctx.fillRect(x + ox + 1.5, y + 3.5, 3, 0.5);
+    }
+  }
+  // 모래사장 둘레 파도 거품
+  function drawFoam(time) {
+    const R = SAND, x0 = R.x0 * T, y0 = R.y0 * T, x1 = (R.x1 + 1) * T, y1 = (R.y1 + 1) * T, k = 1 + Math.sin(time * 1.4) * 0.8;
+    ctx.strokeStyle = 'rgba(248,254,242,.85)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.roundRect(x0 - 1 - k, y0 - 1 - k, x1 - x0 + 2 + 2 * k, y1 - y0 + 2 + 2 * k, 16 + k); ctx.stroke();
+    ctx.strokeStyle = 'rgba(248,254,242,.35)'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.roundRect(x0 - 4 - k * 1.6, y0 - 4 - k * 1.6, x1 - x0 + 8 + 3.2 * k, y1 - y0 + 8 + 3.2 * k, 19 + k); ctx.stroke();
+  }
 
   let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const DECO_KINDS = [[0, 11], [1, 11], [3, 11], [6, 11], [3, 10], [4, 10], [5, 10], [0, 10], [2, 10]];
+  const DECO_KINDS = ['flower_pink', 'flower_yellow', 'flower_white', 'flower_lilac', 'tuft', 'tuft', 'tuft', 'bush', 'mushroom', 'stone'];
   const deco = [];
-  const grassVar = {};
 
   // ───────── 걸을 수 있는 칸 ─────────
   const inRect = (x, y, r) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1;
@@ -83,13 +168,12 @@
 
   function init(canvas, h) {
     cv = canvas; ctx = cv.getContext('2d'); hooks = h;
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) grassVar[key(x, y)] = rnd() < 0.18 ? [[3, 3], [4, 3], [3, 4], [4, 4]][Math.floor(rnd() * 4)] : null;
     const taken = new Set();
     PLOTS.forEach(([x, y]) => { for (let a = -1; a <= 1; a++) for (let b = -2; b <= 1; b++) taken.add(key(x + a, y + b)); });
     FOREST.forEach(([x, y]) => { for (let a = -1; a <= 1; a++) for (let b = -2; b <= 0; b++) taken.add(key(x + a, y + b)); });
     for (let i = 0; i < 60; i++) {
       const x = 2 + Math.floor(rnd() * 20), y = 2 + Math.floor(rnd() * 30), k = key(x, y);
-      if (taken.has(k) || inRect(x, y, POND) || y <= 6 || y >= 26) continue;
+      if (taken.has(k) || inRect(x, y, POND) || y <= 6 || y >= 26 || (y >= POND.y0 - 1 && y <= POND.y1 + 1 && x >= POND.x0 - 1 && x <= POND.x1 + 1)) continue;
       taken.add(k); deco.push({ x, y, k: DECO_KINDS[Math.floor(rnd() * DECO_KINDS.length)] });
     }
     // 꽃이 적으면 나비가 못 오니 꽃밭을 조금 보장
@@ -153,7 +237,7 @@
   function bugSpots(sp, S) {
     const out = [];
     const grass = () => { for (let i = 0; i < 40; i++) { const x = 2 + Math.floor(Math.random() * 20), y = 6 + Math.floor(Math.random() * 26); if (walkable(x, y) && !inRect(x, y, FOREST_R)) return [x * T + 8, y * T + 10]; } return null; };
-    if (sp.loc === 'flower') deco.filter((d) => FLOWERS.some((f) => f[0] === d.k[0] && f[1] === d.k[1]) && zoneOpen(d.x, d.y)).forEach((d) => out.push([d.x * T + 8, d.y * T + 4]));
+    if (sp.loc === 'flower') deco.filter((d) => FLOWERS.includes(d.k) && zoneOpen(d.x, d.y)).forEach((d) => out.push([d.x * T + 8, d.y * T + 4]));
     if (sp.loc === 'meadow' || sp.loc === 'ground') { const g = grass(); if (g) out.push(g); }
     if (sp.loc === 'water') for (let x = POND.x0 - 1; x <= POND.x1 + 1; x++) for (const y of [POND.y0 - 1, POND.y1 + 1]) if (walkable(x, y)) out.push([x * T + 8, y * T + (y < POND.y0 ? 14 : 2)]);
     if (sp.loc === 'tree') {
@@ -196,12 +280,12 @@
     if (!cast || cast.err) return;
     faceTo(bx, by);
     fishing = { loc, cast, phase: 'fly', t: 0, bx, by, sx: P.x + 8, sy: P.y + 2, nib: 1 + Math.floor(Math.random() * 3), wait: 1.2 + Math.random() * 2.5, shadowA: Math.random() * 6.28 };
-    P.act = 0.3;
+    P.act = 0.3; P.actKind = 0;
   }
   function fishingTap() {
     const f = fishing; if (!f) return;
     if (f.phase === 'bite') {
-      fishing = null; P.act = 0.4;
+      fishing = null; P.act = 0.4; P.actKind = 0;
       for (let k = 0; k < 16; k++) fx.push({ k: 'drop', x: f.bx + (Math.random() - 0.5) * 14, y: f.by - Math.random() * 10, vy: -40 + Math.random() * 30, t: 0, life: 0.6 });
       hooks.land(f.cast);
     } else if (f.phase === 'approach' || f.phase === 'nibble') {
@@ -235,10 +319,10 @@
     if (f.phase === 'bite') dip = 4;
     // 줄과 찌
     ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 0.5; ctx.beginPath();
-    const hx = P.x + (P.dir === 2 ? 1 : P.dir === 3 ? 15 : 8), hy = P.y + 2;
+    const hx = P.x + 8 + 8, hy = P.y - 5;
     ctx.moveTo(hx, hy); ctx.quadraticCurveTo((hx + bx) / 2, Math.min(hy, by) - 10, bx, by + dip); ctx.stroke();
     if (f.phase !== 'bite') { ctx.fillStyle = '#ff4d4d'; ctx.fillRect(bx - 1.5, by - 2 + dip, 3, 2); ctx.fillStyle = '#fff'; ctx.fillRect(bx - 1.5, by + dip, 3, 1.5); }
-    if (f.phase === 'bite') { ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#7a1010'; ctx.strokeText('!', P.x + 8, P.y - 6); ctx.fillStyle = '#ffde3a'; ctx.fillText('!', P.x + 8, P.y - 6); }
+    if (f.phase === 'bite') { ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#7a1010'; ctx.strokeText('!', P.x + 8, P.y - 12); ctx.fillStyle = '#ffde3a'; ctx.fillText('!', P.x + 8, P.y - 12); }
   }
 
   // ───────── 입력 ─────────
@@ -294,7 +378,7 @@
     if (obj && obj.type === 'dig') {
       const st = besideTile(obj.x, obj.y); if (!st) return;
       addRing(obj.x * T + 8, obj.y * T + 8, '#ffe680');
-      walkThen(st, () => { faceTo(obj.x * T + 8, obj.y * T + 8); P.act = 0.5; dustAt(obj.x * T + 8, obj.y * T + 10); setTimeout(() => hooks.dig(key(obj.x, obj.y), obj.x * T + 8, obj.y * T + 8), 350); });
+      walkThen(st, () => { faceTo(obj.x * T + 8, obj.y * T + 8); P.act = 0.6; P.actKind = 2; dustAt(obj.x * T + 8, obj.y * T + 10); setTimeout(() => hooks.dig(key(obj.x, obj.y), obj.x * T + 8, obj.y * T + 8), 350); });
       return;
     }
     if (obj && obj.type === 'pond') {
@@ -317,7 +401,7 @@
   }
   function swing(b) {
     if (b.gone) return;
-    faceTo(b.x, b.y); P.act = 0.4;
+    faceTo(b.x, b.y); P.act = 0.4; P.actKind = 1;
     fx.push({ k: 'swing', x: P.x + 8, y: P.y + 6, dir: P.dir, t: 0, life: 0.3 });
     const r = hooks.netSwing(b.sp);
     if (!r || r.err) return;
@@ -327,7 +411,7 @@
 
   // ───────── 효과 ─────────
   const addRing = (x, y, color) => fx.push({ k: 'ring', x, y, color, t: 0, life: 0.4 });
-  function floatText(text, color = '#fff', at) { const [x, y] = at || [P.x + 8, P.y - 6]; fx.push({ k: 'text', text, color, x, y, t: 0, life: 1.4 }); }
+  function floatText(text, color = '#fff', at) { const [x, y] = at || [P.x + 8, P.y - 12]; fx.push({ k: 'text', text, color, x, y, t: 0, life: 1.4 }); }
   function splash(i) { const [x, y] = PLOTS[i]; for (let n = 0; n < 18; n++) fx.push({ k: 'drop', x: x * T + 8 + (Math.random() - 0.5) * 22, y: (y - 1) * T - Math.random() * 14, vy: 40 + Math.random() * 50, t: 0, life: 0.5 + Math.random() * 0.3 }); }
   function pop(i, kind, n) {
     const [x, y] = PLOTS[i];
@@ -339,41 +423,34 @@
   function dustAt(x, y) { for (let k = 0; k < 12; k++) fx.push({ k: 'dust', x: x + (Math.random() - 0.5) * 14, y, vx: (Math.random() - 0.5) * 50, vy: -20 - Math.random() * 30, t: 0, life: 0.6 }); }
 
   // ───────── 그리기 ─────────
-  function nine(sheet, c0, r0, R, varFn) {
-    for (let y = R.y0; y <= R.y1; y++) for (let x = R.x0; x <= R.x1; x++) {
-      const cx = x === R.x0 ? 0 : x === R.x1 ? 2 : 1, cy = y === R.y0 ? 0 : y === R.y1 ? 2 : 1;
-      let c = c0 + cx, r = r0 + cy;
-      if (cx === 1 && cy === 1 && varFn) { const v = varFn(x, y); if (v) { c = v[0]; r = v[1]; } }
-      tile(ctx, sheet, c, r, x * T, y * T);
-    }
-  }
   function drawTree(i, t, time, today) {
     const [x, y] = PLOTS[i], bx = x * T, by = y * T;
-    ctx.fillStyle = t && t.watered === today ? 'rgba(70,40,20,.55)' : 'rgba(120,80,40,.35)';
+    ctx.fillStyle = t && t.watered === today ? 'rgba(120,78,50,.55)' : 'rgba(190,140,90,.45)';
     ctx.beginPath(); ctx.ellipse(bx + 8, by + 12, 13, 5, 0, 0, Math.PI * 2); ctx.fill();
     const st = G.Core.treeStage(t);
     const sway = Math.sin(time * 1.6 + i) * 0.6;
     if (st === 'empty') { ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.setLineDash([2, 2]); ctx.strokeRect(bx + 1, by + 3, 14, 12); ctx.setLineDash([]); return; }
-    if (st === 'sprout') tile(ctx, 'nature', 2, 11, bx, by);
-    else if (st === 'sapling') tile(ctx, 'nature', 1, 10, bx, by - 2);
-    else if (st === 'young') tile(ctx, 'nature', 6, 8, bx - 8 + sway, by - T, 2, 2);
+    const foot = by + 15;
+    if (st === 'sprout') spr('sprout', bx + 8, foot);
+    else if (st === 'sapling') spr('sapling', bx + 8, foot);
+    else if (st === 'young') spr('young', bx + 8 + sway * 0.5, foot);
     else {
-      const [c, r] = st === 'blossom' ? [0, 18] : [3, 18];
-      tile(ctx, 'nature', c, r, bx - T + sway, by - 2 * T, 3, 3);
+      spr(st === 'blossom' ? 'blossom' : 'tree', bx + 8 + sway, foot);
       if (st === 'fruit') {
-        [[-9, -22], [5, -26], [10, -14], [-4, -12]].forEach(([dx, dy], k) => ctx.drawImage(IMG[t.kind], bx + 8 + dx + sway - 5, by + dy + Math.sin(time * 3 + k) * 0.7 - 5, 10, 10));
-        if (Math.floor(time * 2 + i) % 3 === 0) { ctx.fillStyle = '#fff'; ctx.fillRect(bx + 12, by - 30, 1, 3); ctx.fillRect(bx + 11, by - 29, 3, 1); }
+        const cy = foot - 23;
+        [[-9, -5], [6, -9], [9, 3], [-3, 4]].forEach(([dx, dy], k) => ctx.drawImage(IMG[t.kind], bx + 8 + dx + sway - 5, cy + dy + Math.sin(time * 3 + k) * 0.7 - 5, 10, 10));
+        if (Math.floor(time * 2 + i) % 3 === 0) { ctx.fillStyle = '#fff'; ctx.fillRect(bx + 14, cy - 12, 1, 3); ctx.fillRect(bx + 13, cy - 11, 3, 1); }
       }
     }
     if (t && t.watered !== today && st !== 'fruit') {
-      const b = Math.sin(time * 4) * 1.5, top = st === 'sprout' || st === 'sapling' ? 8 : 36;
+      const b = Math.sin(time * 4) * 1.5, top = st === 'sprout' ? 6 : st === 'sapling' ? 12 : st === 'young' ? 22 : 38;
       ctx.fillStyle = '#4fc3f7'; ctx.beginPath(); ctx.arc(bx + 8, by - top + b, 3, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.moveTo(bx + 5.5, by - top - 1 + b); ctx.lineTo(bx + 8, by - top - 6 + b); ctx.lineTo(bx + 10.5, by - top - 1 + b); ctx.fill();
     }
   }
   function drawBug(b, time, night) {
     if (b.y < -100) return;
-    const c = G.Icons.canvasFor(b.sp); const s = 11;
+    const c = G.Icons.canvasFor(b.sp); const s = c instanceof HTMLImageElement ? 14 : 11;
     ctx.globalAlpha = b.gone ? Math.max(0, 1 - (b.t - b.goneAt) / 1.2) : 1;
     if (b.mode === 'fly' && !b.gone) { ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(b.x, b.hy + 6, 3, 1.2, 0, 0, Math.PI * 2); ctx.fill(); }
     if (b.sp.art[0] === 'firefly' && night) { const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 10); g.addColorStop(0, 'rgba(240,255,120,.7)'); g.addColorStop(1, 'rgba(240,255,120,0)'); ctx.fillStyle = g; ctx.fillRect(b.x - 10, b.y - 10, 20, 20); }
@@ -385,14 +462,12 @@
     ctx.globalAlpha = 1;
   }
   function fence(x0, y0, x1, y1) {
-    ctx.fillStyle = '#8a5a35';
-    if (y0 === y1) { ctx.fillRect(x0, y0 + 3, x1 - x0, 1.5); ctx.fillRect(x0, y0 + 7, x1 - x0, 1.5); for (let x = x0; x <= x1; x += T) { ctx.fillStyle = '#6b4226'; ctx.fillRect(x, y0, 2, 11); ctx.fillStyle = '#8a5a35'; } }
-    else { ctx.fillRect(x0 + 0.5, y0, 1.5, y1 - y0); for (let y = y0; y <= y1; y += T) { ctx.fillStyle = '#6b4226'; ctx.fillRect(x0, y, 2.5, 6); ctx.fillStyle = '#8a5a35'; } }
+    if (y0 === y1) { const fw = IMG.fence.width / 2 || 24; for (let x = x0; x < x1; x += fw - 1) spr('fence', x + fw / 2, y0 + 10); }
+    else for (let y = y0; y <= y1; y += 9) spr('post', x0 + 1, y + 10);
   }
   function sign(x, y, text) {
-    ctx.fillStyle = '#6b4226'; ctx.fillRect(x - 1, y, 2, 8);
-    ctx.fillStyle = '#c89a62'; ctx.fillRect(x - 9, y - 7, 18, 9); ctx.strokeStyle = '#6b4226'; ctx.lineWidth = 1; ctx.strokeRect(x - 9, y - 7, 18, 9);
-    ctx.font = 'bold 6px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#4a2a10'; ctx.fillText(text, x, y);
+    spr('sign', x, y + 10);
+    ctx.font = 'bold 5px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#5c3a28'; ctx.fillText(text, x, y - 1);
   }
   function frame(ts) {
     if (!running) return;
@@ -433,13 +508,13 @@
     ctx.setTransform(scale, 0, 0, scale, -Math.round(cam.x * scale), -Math.round(cam.y * scale));
 
     const wx0 = Math.floor(cam.x / T) - 1, wy0 = Math.floor(cam.y / T) - 1, wx1 = Math.ceil((cam.x + vw) / T) + 1, wy1 = Math.ceil((cam.y + vh) / T) + 1;
-    for (let y = wy0; y < wy1; y++) for (let x = wx0; x < wx1; x++) tile(ctx, 'water', 1, 7, x * T, y * T);
-    const rf = Math.floor(time * 4) % 4;
-    for (const [x, y] of [[0, 4], [23, 9], [0, 17], [23, 22], [3, 34], [12, 35], [19, 34], [23, 30], [0, 28]]) ctx.drawImage(IMG.ripple, ((rf + x) % 4) * T, 0, T, T, x * T, y * T, T, T);
-    nine('field', 0, 0, SAND, (x, y) => ((x * 7 + y * 3) % 9 === 0 ? [3, 0] : null));
-    nine('field', 0, 3, GRASS, (x, y) => grassVar[key(x, y)]);
-    nine('water', 0, 6, POND);
-    for (const [x, y] of [[16, 5], [19, 7]]) ctx.drawImage(IMG.ripple, ((rf + x) % 4) * T, 0, T, T, x * T, y * T, T, T);
+    drawSea(wx0 * T, wy0 * T, wx1 * T, wy1 * T, time);
+    drawFoam(time);
+    if (!groundCv) groundCv = buildGround();
+    ctx.drawImage(groundCv, 0, 0, W * T, H * T);
+    // 연못 반짝임
+    ctx.fillStyle = 'rgba(255,255,255,.6)';
+    for (const [x, y, p] of [[16.2, 4.5, 0], [18.6, 6.2, 2], [17.1, 7.6, 4]]) { const k = (Math.sin(time * 1.5 + p) + 1) / 2; ctx.fillRect(x * T, y * T, 3 + k * 3, 0.6); }
 
     // 빛나는 땅
     for (const [x, y] of digSpots(today)) {
@@ -448,23 +523,26 @@
       const p = 0.5 + 0.5 * Math.sin(time * 3 + x);
       const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 9); g.addColorStop(0, `rgba(255,240,150,${0.55 + p * 0.3})`); g.addColorStop(1, 'rgba(255,240,150,0)');
       ctx.fillStyle = g; ctx.fillRect(cx - 10, cy - 10, 20, 20);
-      ctx.strokeStyle = 'rgba(90,60,30,.8)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx - 3, cy - 2); ctx.lineTo(cx + 3, cy + 2); ctx.moveTo(cx + 3, cy - 2); ctx.lineTo(cx - 3, cy + 2); ctx.stroke();
+      spr('dig', cx, cy + 5);
       if (Math.floor(time * 2 + x) % 3 === 0) { ctx.fillStyle = '#fff'; ctx.fillRect(cx + 4, cy - 6, 1, 3); ctx.fillRect(cx + 3, cy - 5, 3, 1); }
     }
 
     const items = [];
-    deco.forEach((d) => items.push({ y: d.y * T, draw: () => tile(ctx, 'nature', d.k[0], d.k[1], d.x * T, d.y * T) }));
-    items.push({ y: (HOUSE.y + HOUSE.h) * T, draw: () => tile(ctx, 'house', 0, 0, HOUSE.x * T, HOUSE.y * T, 4, 3) });
-    items.push({ y: (SHOP.y + SHOP.h) * T, draw: () => tile(ctx, 'house', 16, 0, SHOP.x * T, SHOP.y * T, 3, 3) });
-    items.push({ y: (MUSEUM.y + MUSEUM.h) * T, draw: () => tile(ctx, 'house', 23, 0, MUSEUM.x * T, MUSEUM.y * T, 3, 3) });
-    FOREST.forEach(([x, y], k) => items.push({ y: y * T + 15, draw: () => tile(ctx, 'nature', 3, 18, x * T - T + Math.sin(time * 1.3 + k) * 0.5, y * T - 2 * T, 3, 3) }));
+    for (const [x, y] of [[16.3, 6.4], [19.2, 4.6], [17.6, 8.3]]) spr('lily', x * T, y * T + Math.sin(time + x) * 0.4);
+    deco.forEach((d) => items.push({ y: d.y * T + 12, draw: () => spr(d.k, d.x * T + 8, d.y * T + 14) }));
+    BEACH_DECO.forEach(([x, y, k]) => items.push({ y: y * T + 10, draw: () => spr(k, x * T + 8, y * T + 12) }));
+    PALMS.forEach(([x, y], k) => items.push({ y: y * T + 14, draw: () => spr('palm', x * T + 8 + Math.sin(time * 1.1 + k) * 0.4, y * T + 15) }));
+    for (const [b, n] of [[HOUSE, 'house'], [SHOP, 'shop'], [MUSEUM, 'museum']]) items.push({ y: (b.y + b.h) * T, draw: () => spr(n, (b.x + b.w / 2) * T, (b.y + b.h) * T + 2) });
+    FOREST.forEach(([x, y], k) => items.push({ y: y * T + 15, draw: () => spr(k % 2 ? 'pine' : 'forest', x * T + 8 + Math.sin(time * 1.3 + k) * 0.5, y * T + 15) }));
     PLOTS.forEach(([, y], i) => items.push({ y: y * T + 15, draw: () => drawTree(i, S.island.trees[i], time, today) }));
     bugs.forEach((b) => items.push({ y: b.mode === 'fly' ? b.hy + 8 : b.y + 4, draw: () => drawBug(b, time, night > 0.2) }));
     items.push({ y: P.y + 15.5, draw: () => {
       ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(P.x + 8, P.y + 15, 5, 2, 0, 0, Math.PI * 2); ctx.fill();
-      const row = P.act > 0 ? 4 : P.path.length ? Math.floor(P.anim) % 4 : 0;
-      ctx.drawImage(IMG.player, P.dir * T, row * T, T, T, Math.round(P.x), Math.round(P.y) - 2, T, T);
-      if (P.sneak) { ctx.font = '6px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText('살금…', P.x + 8, P.y - 4); }
+      // 그림 칸: 줄 0 아래 1 위 2 왼쪽 3 오른쪽 4 행동(낚시·잠자리채·삽), 칸 0 서기 1·2 걷기
+      const pose = fishing ? [4, 0] : P.act > 0 ? [4, P.actKind || 0] : P.path.length ? [P.dir, [1, 0, 2, 0][Math.floor(P.anim) % 4]] : [P.dir, 0];
+      const pw = IMG.player.width / 3, ph = IMG.player.height / 5, bob = P.path.length && Math.floor(P.anim) % 2 ? -0.5 : 0;
+      ctx.drawImage(IMG.player, pose[1] * pw, pose[0] * ph, pw, ph, Math.round((P.x + 8 - pw / 4) * 2) / 2, P.y + 16 - ph / 2 + bob, pw / 2, ph / 2);
+      if (P.sneak) { ctx.font = '6px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText('살금…', P.x + 8, P.y - 10); }
     } });
     items.sort((a, b) => a.y - b.y).forEach((it) => it.draw());
 
@@ -475,9 +553,10 @@
     drawFishing(time);
 
     ctx.font = 'bold 6px sans-serif'; ctx.textAlign = 'center';
-    label('우리 집', (HOUSE.x + 2) * T, HOUSE.y * T - 2);
-    label('상점', (SHOP.x + 1.5) * T, SHOP.y * T - 2);
-    label('박물관', (MUSEUM.x + 1.5) * T, MUSEUM.y * T - 2);
+    const top = (b, n) => (b.y + b.h) * T + 2 - IMG[n].height / 2 - 1;
+    label('우리 집', (HOUSE.x + 2) * T, top(HOUSE, 'house'));
+    label('상점', (SHOP.x + 1.5) * T, top(SHOP, 'shop'));
+    label('박물관', (MUSEUM.x + 1.5) * T, top(MUSEUM, 'museum'));
     label('과수원', 8 * T + 8, 10 * T + 4);
     label('연못', (POND.x0 + 3) * T, POND.y0 * T - 2);
 
