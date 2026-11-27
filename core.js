@@ -497,7 +497,7 @@
   }
   function digResult(S, date, rng = Math.random) {
     const x = rng();
-    if (x < [0, 0.6, 0.68, 0.75][tier(S, 'shovel')]) { const sp = D().pick(D().FOSSILS, rng); return { type: 'catch', sp, ...addCatch(S, sp, date) }; }
+    if (x < [0, 0.6, 0.68, 0.75][tier(S, 'shovel')]) { const sp = D().pick(D().FOSSILS, rng, hasV(S, 'lulu') ? 0.3 : 0); return { type: 'catch', sp, ...addCatch(S, sp, date) }; }
     if (x < 0.92) {
       const y = rng(), id = y < 0.35 ? 'stone' : y < 0.65 ? 'copper' : y < 0.82 ? 'silver' : y < 0.92 ? 'gold' : ['ruby', 'emerald', 'amethyst', 'topaz'][Math.floor(rng() * 4)];
       S.island.bag.ore[id] = (S.island.bag.ore[id] || 0) + 1; return { type: 'ore', id };
@@ -515,7 +515,7 @@
   // 낚시: 던질 때 HP를 쓰고 무엇이 물지 정해 둔다(그림자 크기로 힌트).
   function castLine(S, loc, when, rng = Math.random) {
     const e = spend(S, cost(S, 'fish')); if (e) return { err: e };
-    if (rng() < 0.05) return { ok: true, lucky: true, size: 2 };
+    if (rng() < luckyChance(S)) return { ok: true, lucky: true, size: 2 };
     const sp = D().pick(D().fishPool(loc, when), rng, luckBonus(S));
     return { ok: true, sp, size: sp ? sp.size : 1 };
   }
@@ -531,7 +531,8 @@
     if (rng() > Math.min(0.97, NET_HIT[sp.r] + [0, 0, 0.08, 0.15][tier(S, 'net')])) return { ok: true, miss: true };
     return { ok: true, type: 'catch', sp, ...addCatch(S, sp, date) };
   }
-  const luckBonus = (S) => [0, 0, 0.2, 0.5][tier(S, 'rod')]; // 4단계: 행운 친구도 더할 예정
+  const luckBonus = (S) => [0, 0, 0.2, 0.5][tier(S, 'rod')] + (hasV(S, 'lulu') ? 0.3 : 0);
+  const luckyChance = (S) => (hasV(S, 'lulu') ? 0.08 : 0.05);
   const fleeChance = (S, r) => FLEE[r] * [1, 1, 0.8, 0.6][tier(S, 'net')];
   function sellItem(S, cat, id, n = 1) {
     const bag = S.island.bag[cat]; n = Math.min(n, bag[id] || 0); if (n <= 0) return { err: '없어요' };
@@ -545,6 +546,51 @@
     bag[id]--; if (!bag[id]) delete bag[id];
     return { ok: true, got: heal(S, D().BY_ID[id].hp) };
   }
+  // ───────── 주민: 별점마다 한 명씩 이사 와서 돕는다 ─────────
+  const VILLAGERS = [
+    { id: 'toto', star: 2, name: '토토', kind: '토끼 정원사', role: '매일 아침 물 안 준 나무 2그루에 물을 줘요' },
+    { id: 'mongsil', star: 3, name: '몽실', kind: '양 청소부', role: '매일 잡초·쓰레기를 2개까지 치워요' },
+    { id: 'coco', star: 4, name: '코코', kind: '다람쥐 채집가', role: '매일 과일·씨앗·코인 중 하나를 주워 와요' },
+    { id: 'lulu', star: 5, name: '루루', kind: '별빛 고양이', role: '희귀한 걸 낚고 캘 확률이 오르고 럭키가 더 자주 나와요' },
+  ];
+  const villagersHere = (S) => VILLAGERS.filter((v) => (S.island.stars || 1) >= v.star);
+  const hasV = (S, id) => villagersHere(S).some((v) => v.id === id);
+  // 하루 한 번(앱을 연 날) 주민 도움
+  function villagerHelp(S, date, rng = Math.random) {
+    const I = S.island; if (I.helpDate === date) return [];
+    I.helpDate = date; const out = [];
+    if (hasV(S, 'toto')) {
+      const ts = I.trees.filter((t) => t && t.watered !== date && treeStage(t) !== 'fruit').slice(0, 2);
+      ts.forEach((t) => { t.watered = date; });
+      if (ts.length) out.push(`🐰 토토가 나무 ${ts.length}그루에 물을 줬어요`);
+    }
+    if (hasV(S, 'mongsil')) {
+      let n = 0;
+      while (n < 2 && (I.newLitter || []).length) { I.newLitter.pop(); n++; }
+      while (n < 2 && (I.litter || []).length) { I.litter.pop(); n++; }
+      if (n && !(I.litter || []).length && !(I.newLitter || []).length) I.cleanFrom = I.cleanFrom || date;
+      if (n) out.push(`🐑 몽실이 잡초·쓰레기 ${n}개를 치웠어요`);
+    }
+    if (hasV(S, 'coco')) {
+      const x = rng(), kinds = Object.keys(FRUITS), k = kinds[Math.floor(rng() * kinds.length)];
+      if (x < 0.5) { I.fruit[k] = (I.fruit[k] || 0) + 2; out.push(`🐿️ 코코가 ${FRUITS[k].name} 2개를 주워 왔어요`); }
+      else if (x < 0.8) { I.seeds[k] = (I.seeds[k] || 0) + 1; out.push(`🐿️ 코코가 ${FRUITS[k].name} 씨앗을 주워 왔어요`); }
+      else { S.player.coins += 150; out.push('🐿️ 코코가 코인 150개를 주워 왔어요'); }
+    }
+    return out;
+  }
+  // 말 걸기: 주민마다 하루 한 번 작은 선물, 친해지면 큰 선물
+  const FRIEND_GIFT = { 5: 300, 15: 800, 30: 2000 };
+  function talk(S, id, date, rng = Math.random) {
+    const I = S.island; I.talked = I.talked || {}; I.friend = I.friend || {};
+    if (!hasV(S, id)) return { err: '아직 없는 주민' };
+    if (I.talked[id] === date) return { ok: true, again: true, friend: I.friend[id] || 0 };
+    I.talked[id] = date; I.friend[id] = (I.friend[id] || 0) + 1;
+    const coins = 20 + Math.floor(rng() * 5) * 10; S.player.coins += coins;
+    const big = FRIEND_GIFT[I.friend[id]] || 0; S.player.coins += big;
+    return { ok: true, coins, big, friend: I.friend[id] };
+  }
+
   // 섬 별점
   const dexCount = (S) => ['fruit', 'fish', 'bug', 'fossil'].reduce((a, c) => a + Object.keys(S.island.dex[c] || {}).length, 0);
   const STAR_RULES = [
@@ -570,7 +616,7 @@
     DAY_SHIFT_H, ymd, parseYmd, addDays, gameDate, weekday, weekStart, WD,
     R, maxHp, MISS_HP, CHURCH_HP, BASE_MAX_HP,
     TOOLS, TIER_NAME, TOOL_PRICE, TOOL_INFO, tier, cost, buyTool, waterAll, fleeChance, TOPS, BOTTOMS, HATS, CLOTHES, wardrobe, owns, wear, shopToday, buySeed, buyClothes,
-    addLitter, clearLitter, cleanDays,
+    addLitter, clearLitter, cleanDays, VILLAGERS, villagersHere, villagerHelp, talk, FRIEND_GIFT,
     addCatch, lucky, dig, digResult, castLine, landFish, swingNet, FLEE, NET_HIT, sellItem, eatFish, dexCount, STAR_RULES, computeStars, checkStars,
     FRUITS, COST, PLOTS, GROW_DAYS, defaultIsland, treeStage, plant, water, harvest, growTrees, eat, sell, heal,
     SUBJECTS, SUBJECT_BY_WD, questsFor, isComplete, defaultState, dayRec, qRec,

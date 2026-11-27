@@ -215,3 +215,14 @@ body:has(#app.ov) { padding-bottom: 0; }
 .sheet-card .seg small { display: block; font-size: 10px; opacity: .8; }
 .slot.on { outline: 3px solid var(--accent); }
 .icon.none { display: grid; place-items: center; font-size: 22px; color: #b09070; }
+
+/* 주민 대화 */
+.talk { display: flex; gap: 10px; align-items: flex-start; text-align: left; }
+.talk .face { width: 64px; height: 64px; flex: none; background: #ffe9c4; border: 2px solid #e3cfa6; border-radius: 14px; }
+.talk h3 { margin: 0 0 4px; }
+.bubble { background: #fff; border: 2px solid #e3cfa6; border-radius: 12px; padding: 8px 10px; margin: 0; line-height: 1.5; color: #4a3424; }
+.gift { background: #fff3c4; border-radius: 10px; padding: 6px 10px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 0; color: #4a3424; }
+.vrow { display: flex; gap: 8px; margin-top: 8px; }
+.vcell { display: grid; justify-items: center; gap: 2px; font-size: 11px; }
+.vcell img { width: 40px; height: 40px; background: #ffffff14; border-radius: 10px; }
+.vcell.off { opacity: .6; }

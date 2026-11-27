@@ -163,6 +163,50 @@
     dressed = c; dressKey = k; return c;
   }
 
+  // ───────── 주민: 집 근처를 천천히 돌아다닌다 ─────────
+  const V_HOME = { toto: [8, 16], mongsil: [11, 24], coco: [18, 17], lulu: [14, 9] };
+  let vill = [];
+  const vImg = {};
+  function syncVillagers() {
+    const S = hooks.state(), here = G.Core.villagersHere(S).map((v) => v.id);
+    vill = vill.filter((v) => here.includes(v.id));
+    for (const id of here) if (!vill.some((v) => v.id === id)) {
+      const [hx, hy] = V_HOME[id]; vill.push({ id, x: hx * T + 8, y: hy * T + 14, tx: null, ty: null, wait: Math.random() * 3, dir: 0, anim: 0 });
+      if (!vImg[id]) { vImg[id] = new Image(); vImg[id].src = `assets/a/vill_${id}.png`; }
+    }
+  }
+  function updateVillagers(dt) {
+    for (const v of vill) {
+      if (v.talk > 0) { v.talk -= dt; continue; }
+      if (v.tx == null) {
+        v.wait -= dt; if (v.wait > 0) continue;
+        const [hx, hy] = V_HOME[v.id];
+        for (let k = 0; k < 10; k++) { const x = hx + Math.round((Math.random() - 0.5) * 6), y = hy + Math.round((Math.random() - 0.5) * 4); if (walkable(x, y)) { v.tx = x * T + 8; v.ty = y * T + 14; break; } }
+        if (v.tx == null) v.wait = 1;
+        continue;
+      }
+      const dx = v.tx - v.x, dy = v.ty - v.y, d = Math.hypot(dx, dy), sp = 18 * dt;
+      v.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 3 : 2) : dy > 0 ? 0 : 1; v.anim += dt * 6;
+      if (d <= sp) { v.x = v.tx; v.y = v.ty; v.tx = null; v.wait = 2 + Math.random() * 4; v.dir = 0; }
+      else { v.x += (dx / d) * sp; v.y += (dy / d) * sp; }
+    }
+  }
+  function drawVillager(v, time, S) {
+    const im = vImg[v.id]; if (!im || !im.width) return;
+    const fw = im.width / 3, fh = im.height, view = v.dir === 1 ? 2 : v.dir >= 2 ? 1 : 0, walking = v.tx != null;
+    const bob = walking && Math.floor(v.anim) % 2 ? -0.6 : Math.sin(time * 2 + v.id.length) * 0.25;
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(v.x, v.y, 5, 2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.translate(Math.round(v.x * 2) / 2, 0); if (v.dir === 3) ctx.scale(-1, 1);
+    ctx.drawImage(im, view * fw, 0, fw, fh, -fw / 4, v.y + 0.5 - fh / 2 + bob, fw / 2, fh / 2); ctx.restore();
+    const talked = (S.island.talked || {})[v.id] === hooks.today();
+    if (!talked) { // 말풍선
+      const bx = v.x + 7, by = v.y - fh / 2 - 2 + Math.sin(time * 3) * 0.8;
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#8a5a35'; ctx.lineWidth = 0.6;
+      ctx.beginPath(); ctx.roundRect(bx - 5, by - 4, 10, 7, 2.5); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#8a5a35'; for (let k = -1; k <= 1; k++) ctx.fillRect(bx + k * 2.6 - 0.6, by - 1, 1.2, 1.2);
+    }
+  }
+
   // ───────── 잡초·쓰레기 ─────────
   function placeLitter(S) {
     const I = S.island; if (!I.newLitter || !I.newLitter.length) return;
@@ -391,6 +435,7 @@
   function objectAt(wx, wy) {
     const tx = Math.floor(wx / T), ty = Math.floor(wy / T);
     for (const b of bugs) if (!b.gone && Math.hypot(b.x - wx, b.y - wy) < 11) return { type: 'bug', bug: b };
+    for (const v of vill) if (Math.abs(v.x - wx) < 8 && wy < v.y + 2 && wy > v.y - 24) return { type: 'villager', v };
     const lit = hooks.state().island.litter || [];
     for (let i = 0; i < lit.length; i++) if (lit[i].x === tx && lit[i].y === ty) return { type: 'litter', idx: i, x: tx, y: ty };
     for (const [x, y] of digSpots(hooks.today())) if (tx === x && ty === y && !hooks.isDug(key(x, y))) return { type: 'dig', x, y };
@@ -437,6 +482,13 @@
       const st = walkable(bt[0], bt[1]) && Math.hypot(bt[0] * T + 8 - b.x, bt[1] * T + 8 - b.y) < 14 ? bt : besideTile(bt[0], bt[1]) || bt;
       addRing(b.x, b.y, '#ffe680');
       if (!walkThen(st, () => swing(b), b)) hooks.toast('거기엔 갈 수 없어요');
+      return;
+    }
+    if (obj && obj.type === 'villager') {
+      const v = obj.v; v.talk = 6; v.tx = null;
+      const vt = [Math.round((v.x - 8) / T), Math.round((v.y - 14) / T)], st = besideTile(vt[0], vt[1]) || vt;
+      addRing(v.x, v.y - 4, '#ffd6f0');
+      walkThen(st, () => { faceTo(v.x, v.y - 6); v.dir = P.y + 8 > v.y - 6 ? 0 : 1; v.talk = 4; hooks.onTap({ type: 'villager', id: v.id }); });
       return;
     }
     if (obj && obj.type === 'litter') {
@@ -553,6 +605,7 @@
     const S = hooks.state(), today = hooks.today();
     buildBlocked(S);
     placeLitter(S);
+    if (vill.length !== G.Core.villagersHere(S).length) syncVillagers();
     if (!P.path.length) unstick();
     const hr = new Date().getHours() + new Date().getMinutes() / 60;
     const night = hr >= 20 || hr < 5 ? 0.38 : hr >= 18 ? (hr - 18) / 2 * 0.38 : hr < 7 ? (7 - hr) / 2 * 0.38 : 0;
@@ -577,7 +630,7 @@
       }
     } else P.anim = 0;
     bugTimer -= dt; if (bugTimer <= 0) { spawnBugs(S, bugs.length === 0); bugTimer = 10 + Math.random() * 8; }
-    updateBugs(dt); updateFishing(dt);
+    updateBugs(dt); updateFishing(dt); updateVillagers(dt);
 
     const vw = cv.width / scale, vh = cv.height / scale;
     cam.x = vw >= W * T ? (W * T - vw) / 2 : Math.max(0, Math.min(W * T - vw, P.x + 8 - vw / 2));
@@ -609,6 +662,7 @@
     const items = [];
     for (const [x, y] of [[16.3, 6.4], [19.2, 4.6], [17.6, 8.3]]) spr('lily', x * T, y * T + Math.sin(time + x) * 0.4);
     deco.forEach((d) => items.push({ y: d.y * T + 12, draw: () => spr(d.k, d.x * T + 8, d.y * T + 14) }));
+    vill.forEach((v) => items.push({ y: v.y, draw: () => drawVillager(v, time, S) }));
     (S.island.litter || []).forEach((l) => items.push({ y: l.y * T + 12, draw: () => spr(l.k === 'can' ? 'can' : 'weeds', l.x * T + 8, l.y * T + 14) }));
     BEACH_DECO.forEach(([x, y, k]) => items.push({ y: y * T + 10, draw: () => spr(k, x * T + 8, y * T + 12) }));
     PALMS.forEach(([x, y], k) => items.push({ y: y * T + 14, draw: () => spr('palm', x * T + 8 + Math.sin(time * 1.1 + k) * 0.4, y * T + 15) }));
@@ -670,6 +724,6 @@
   function start() { if (running) return; running = true; resize(); t0 = 0; ready.then(() => requestAnimationFrame(frame)); }
   function stop() { running = false; fishing = null; }
 
-  G.Island = { init, start, stop, tapWorld, redress, zoomStep, ZOOMS, floatText, splash, pop, dust, sparkle, resize, PLOTS, IMG, ready, player: P,
-    _debug: { bugs: () => bugs, fishing: () => fishing, spots: () => spots, spawn: (sp, x, y) => bugs.push({ sp, x, y, hx: x, hy: y, ph: 0, mode: FLY.has(sp.art[0]) ? 'fly' : STILL.has(sp.art[0]) ? 'still' : 'crawl', gone: false, t: 0 }) } };
+  G.Island = { init, start, stop, tapWorld, redress, syncVillagers, zoomStep, ZOOMS, floatText, splash, pop, dust, sparkle, resize, PLOTS, IMG, ready, player: P,
+    _debug: { vill: () => vill, bugs: () => bugs, fishing: () => fishing, spots: () => spots, spawn: (sp, x, y) => bugs.push({ sp, x, y, hx: x, hy: y, ph: 0, mode: FLY.has(sp.art[0]) ? 'fly' : STILL.has(sp.art[0]) ? 'still' : 'crawl', gone: false, t: 0 }) } };
 })(window);

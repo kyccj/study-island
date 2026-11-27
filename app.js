@@ -647,6 +647,7 @@
     if (obj.type === 'house') return closetSheet();
     if (obj.type === 'shop') return shopSheet();
     if (obj.type === 'museum') { tab = 'dex'; render(); return; }
+    if (obj.type === 'villager') return talkSheet(obj.id);
   }
 
   // ───────── 상점·옷장 ─────────
@@ -690,6 +691,28 @@
       <div class="grid g4">${cells.join('')}</div><button class="btn ghost wide" data-act="closeSheet">닫기</button>`);
   }
 
+  // ───────── 주민 ─────────
+  const vIcon = (id) => `assets/a/vface_${id}.png`;
+  const LINES = {
+    toto: ['나무들이 오늘도 쑥쑥 크고 있어! 너도 공부로 쑥쑥 크자 🌱', '물 주는 건 나한테 맡겨. 대신 단어는 네가 외워야 해!', '꽃이 피려면 매일 조금씩! 공부도 똑같대.'],
+    mongsil: ['섬이 반짝반짝하니까 기분 좋다~ 음메!', '잡초는 내가 뽑을게. 너는 오답 노트 정리해 줘!', '깨끗한 섬, 깨끗한 책상! 오늘도 화이팅이야.'],
+    coco: ['숲에서 도토리 주웠어! 너는 오늘 점수 주웠어?', '바쁘다 바빠! 근데 너만큼은 아니지, 공부하는 사람!', '열심히 모으면 언젠가 꽉 차! 도감도, 실력도!'],
+    lulu: ['별이 그러는데… 오늘 너한테 좋은 일이 생긴대 ✨', '행운은 준비된 사람한테 온대. 기출 한 세트 어때?', '밤하늘처럼 차분하게. 집중하면 금방이야.'],
+  };
+  function talkSheet(id) {
+    const v = C.VILLAGERS.find((x) => x.id === id), d = today(), r = C.talk(S, id, d);
+    if (r.err) return;
+    const left = C.questsFor(d).filter((q) => q.required && !C.isComplete(q.id, (S.days[d] && S.days[d].q[q.id]))).map((q) => q.title);
+    const pool = LINES[id], base = pool[(Math.floor(Date.now() / 864e5) + id.length) % pool.length];
+    const study = left.length ? `오늘 남은 퀘스트는 <b>${left.length}개</b>야. ${esc(left[0])}부터 해 볼까?` : '오늘 퀘스트 다 했구나! 정말 대단해 🎉';
+    const gift = r.again ? '<p class="muted small">오늘은 벌써 이야기했어요. 내일 또 와요!</p>'
+      : `<p class="gift">🎁 선물: ${COIN}${r.coins}${r.big ? ` + 친해진 기념 ${COIN}${r.big}!` : ''}</p>`;
+    save(); renderHud();
+    openSheet(`<div class="talk"><img src="${vIcon(id)}" class="px face"><div><h3>${v.name} <small class="muted">${v.kind}</small></h3>
+      <p class="bubble">${base}<br>${study}</p></div></div>${gift}
+      <p class="muted small">❤️ 친밀도 ${r.friend} · ${v.role}</p><button class="btn primary wide" data-act="closeSheet">고마워!</button>`);
+  }
+
   // ───────── 잡았을 때 카드 ─────────
   const D = window.Data;
   const STARS = (r) => '★'.repeat(r) + '<span class="off">' + '★'.repeat(5 - r) + '</span>';
@@ -725,7 +748,10 @@
     save(); renderHud();
     if (st) {
       const opened = { 2: '🏖️ 해변이 열렸어요! 바다낚시를 할 수 있어요.', 3: '🌲 숲이 열렸어요! 희귀한 곤충이 살아요.', 4: '⛰️ 동굴 구역은 곧 열려요.', 5: '🏔️ 섬 꼭대기는 곧 열려요.' }[st];
-      showCard(`<div class="ribbon gold">섬 별점 UP!</div><div class="big-star">${'★'.repeat(st)}</div><h2>섬이 ★${st}이 되었어요!</h2><p>${opened}</p><p class="muted">주민 이사는 4단계에서 시작돼요.</p>`, 'rare5');
+      const nv = C.VILLAGERS.find((v) => v.star === st);
+      showCard(`<div class="ribbon gold">섬 별점 UP!</div><div class="big-star">${'★'.repeat(st)}</div><h2>섬이 ★${st}이 되었어요!</h2><p>${opened}</p>
+        ${nv ? `<div class="talk"><img src="${vIcon(nv.id)}" class="px face"><div><b>${nv.name}(${nv.kind})가 이사 왔어요!</b><p class="muted small">${nv.role}</p></div></div>` : ''}`, 'rare5');
+      window.Island.syncVillagers && window.Island.syncVillagers();
     }
   }
   const islandHooks = {
@@ -776,7 +802,8 @@
     let html = `<div class="card star-card"><div class="row"><h3>🏝️ 섬 별점 <span class="gold-t">${'★'.repeat(st)}</span><span class="off">${'★'.repeat(5 - st)}</span></h3><b>${total}종</b></div>
       ${next ? `<p class="muted">다음 ★${st + 1}: ${esc(next.text)}</p><div class="bar xp"><i style="width:${Math.min(100, (total / next.dex) * 100)}%"></i><em>도감 ${total}/${next.dex}</em></div>
       ${st + 1 === 3 ? `<p class="small">🌿 깨끗한 섬 ${Math.min(7, C.cleanDays(S, today()))}/7일${(I.litter || []).length ? ` · 지금 잡초·쓰레기 ${I.litter.length}개` : ''}</p>` : ''}
-      ${st + 1 === 4 ? `<p class="small">🛠️ 금 도구 ${Object.keys(C.TOOLS).some((t) => C.tier(S, t) >= 3) ? '있음 ✓' : '없음 (상점)'}</p>` : ''}` : '<p>최고 별점이에요!</p>'}</div>`;
+      ${st + 1 === 4 ? `<p class="small">🛠️ 금 도구 ${Object.keys(C.TOOLS).some((t) => C.tier(S, t) >= 3) ? '있음 ✓' : '없음 (상점)'}</p>` : ''}` : '<p>최고 별점이에요!</p>'}
+      <div class="vrow">${C.VILLAGERS.map((v) => st >= v.star ? `<div class="vcell"><img src="${vIcon(v.id)}" class="px"><small>${v.name}</small></div>` : `<div class="vcell off"><img src="${vIcon(v.id)}" class="px silhouette"><small>★${v.star}</small></div>`).join('')}</div></div>`;
     const cats = [['fish', '🐟 물고기', D.FISH], ['bug', '🦋 곤충', D.BUGS], ['fossil', '🦴 화석', D.FOSSILS], ['fruit', '🍒 과일', null]];
     html += `<div class="seg dexseg">${cats.map(([k, l, list]) => `<button class="${dexCat === k ? 'on' : ''}" data-act="dexCat" data-k="${k}">${l}<small>${Object.keys(I.dex[k] || {}).length}/${list ? list.length : 6}</small></button>`).join('')}</div>`;
     const when = new Date();
@@ -836,7 +863,7 @@
 
   // ───────── 시작 ─────────
   function boot() {
-    const msgs = C.settle(S, today());
+    const msgs = C.settle(S, today()).concat(C.villagerHelp(S, today()));
     // 앱이 꺼진 사이에 타이머가 돌던 경우: 꺼진 시점부터 나가 있던 걸로 본다
     if (S.timer && S.timer.running) {
       if (!S.timer.hiddenAt) S.timer.hiddenAt = S.timer.lastTick;
@@ -846,11 +873,11 @@
     }
     window.Island.init($('#cv'), islandHooks);
     save(); render();
-    if (msgs.length) modal('📜 지난날 정산', msgs);
+    if (msgs.length) modal('📜 섬 소식', msgs);
     if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
   }
   // 새벽 4시를 넘기면 새로 정산
   let lastDay = today();
-  setInterval(() => { if (today() !== lastDay) { lastDay = today(); const m = C.settle(S, today()); save(); render(); if (m.length) modal('📜 지난날 정산', m); } }, 60e3);
+  setInterval(() => { if (today() !== lastDay) { lastDay = today(); const m = C.settle(S, today()).concat(C.villagerHelp(S, today())); save(); render(); if (m.length) modal('📜 섬 소식', m); } }, 60e3);
   boot();
 })();

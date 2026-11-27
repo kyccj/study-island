@@ -216,5 +216,19 @@ t('금 물뿌리개: 한 번에 모든 나무', () => {
   S.island.trees[0] = { kind: 'cherry', g: 0 }; S.island.trees[2] = { kind: 'pear', g: 1 };
   const r = C.waterAll(S, 'd'); assert.strictEqual(r.n, 2); assert.strictEqual(S.player.hp, 47);
 });
+t('주민: 별점만큼 이사, 하루 한 번 도움·말 걸기', () => {
+  const S = C.defaultState();
+  assert.strictEqual(C.villagersHere(S).length, 0);
+  S.island.stars = 3; assert.deepStrictEqual(C.villagersHere(S).map((v) => v.id), ['toto', 'mongsil']);
+  S.island.trees[0] = { kind: 'cherry', g: 0 }; S.island.trees[1] = { kind: 'pear', g: 1 }; S.island.trees[2] = { kind: 'lemon', g: 2 };
+  S.island.litter = [{ k: 'weeds', x: 1, y: 1 }]; S.island.newLitter = ['can'];
+  const m = C.villagerHelp(S, '2026-11-28');
+  assert.strictEqual(S.island.trees.filter((t) => t && t.watered === '2026-11-28').length, 2);
+  assert.strictEqual(S.island.litter.length + S.island.newLitter.length, 0); assert.strictEqual(m.length, 2);
+  assert.deepStrictEqual(C.villagerHelp(S, '2026-11-28'), []);
+  const c0 = S.player.coins, r = C.talk(S, 'toto', '2026-11-28', () => 0);
+  assert.strictEqual(S.player.coins, c0 + 20); assert.ok(C.talk(S, 'toto', '2026-11-28').again); assert.ok(C.talk(S, 'coco', '2026-11-28').err);
+  void r;
+});
 console.log(fails ? `\n${fails}개 실패` : '\n전부 통과');
 process.exit(fails ? 1 : 0);
