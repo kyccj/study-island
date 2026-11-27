@@ -448,15 +448,21 @@
       ctx.beginPath(); ctx.moveTo(bx + 5.5, by - top - 1 + b); ctx.lineTo(bx + 8, by - top - 6 + b); ctx.lineTo(bx + 10.5, by - top - 1 + b); ctx.fill();
     }
   }
+  // 섬에서 보이는 곤충 크기(세계 단위). 실제 크기 차이를 살리되 징그럽지 않게 작게
+  const BUG_SIZE = { ant: 6, ladybug: 7, firefly: 7, bee: 8, strider: 8, cricket: 8, spider: 8, snail: 8, diving: 8, hopper: 9, acrida: 10, cetonia: 9, jewel: 9, goldbeetle: 9,
+    cabbage: 10, sulphur: 10, apollo: 11, moth: 10, wintermoth: 9, redfly: 11, skimmer: 11, bigdragon: 12, mantis: 11, cicada: 10, swallowtail: 12, swallow2: 12, morpho: 12,
+    rhino: 12, stag: 11, bigstag: 13 };
   function drawBug(b, time, night) {
     if (b.y < -100) return;
-    const c = G.Icons.canvasFor(b.sp); const s = c instanceof HTMLImageElement ? 14 : 11;
+    const c = G.Icons.canvasFor(b.sp); const s = c instanceof HTMLImageElement ? (BUG_SIZE[b.sp.id] || 11) : 11;
     ctx.globalAlpha = b.gone ? Math.max(0, 1 - (b.t - b.goneAt) / 1.2) : 1;
     if (b.mode === 'fly' && !b.gone) { ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(b.x, b.hy + 6, 3, 1.2, 0, 0, Math.PI * 2); ctx.fill(); }
     if (b.sp.art[0] === 'firefly' && night) { const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 10); g.addColorStop(0, 'rgba(240,255,120,.7)'); g.addColorStop(1, 'rgba(240,255,120,0)'); ctx.fillStyle = g; ctx.fillRect(b.x - 10, b.y - 10, 20, 20); }
     const flap = b.mode === 'fly' ? 0.55 + 0.45 * Math.abs(Math.sin(time * 14 + b.ph)) : 1;
     const hop = b.mode === 'crawl' && Math.floor(b.t * 2 + b.ph) % 4 === 0 ? -1 : 0;
+    ctx.imageSmoothingEnabled = true; // 작게 줄인 아이콘이 깨지지 않게
     ctx.drawImage(c, b.x - (s * flap) / 2, b.y - s / 2 + hop, s * flap, s);
+    ctx.imageSmoothingEnabled = false;
     // 희귀한 곤충은 반짝
     if (b.sp.r >= 4 && Math.floor(time * 3 + b.ph) % 4 === 0) { ctx.fillStyle = '#fff'; ctx.fillRect(b.x + 4, b.y - 6, 1, 3); ctx.fillRect(b.x + 3, b.y - 5, 3, 1); }
     ctx.globalAlpha = 1;
@@ -541,7 +547,7 @@
       // 그림 칸: 줄 0 아래 1 위 2 왼쪽 3 오른쪽 4 행동(낚시·잠자리채·삽), 칸 0 서기 1·2 걷기
       const pose = fishing ? [4, 0] : P.act > 0 ? [4, P.actKind || 0] : P.path.length ? [P.dir, [1, 0, 2, 0][Math.floor(P.anim) % 4]] : [P.dir, 0];
       const pw = IMG.player.width / 3, ph = IMG.player.height / 5, bob = P.path.length && Math.floor(P.anim) % 2 ? -0.5 : 0;
-      ctx.drawImage(IMG.player, pose[1] * pw, pose[0] * ph, pw, ph, Math.round((P.x + 8 - pw / 4) * 2) / 2, P.y + 16 - ph / 2 + bob, pw / 2, ph / 2);
+      ctx.drawImage(IMG.player, pose[1] * pw, pose[0] * ph, pw, ph, Math.round((P.x + 8 - pw / 4) * 2) / 2, P.y + 15.5 - ph / 2 + bob, pw / 2, ph / 2); // 그림마다 발끝이 칸 맨 아래
       if (P.sneak) { ctx.font = '6px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText('살금…', P.x + 8, P.y - 10); }
     } });
     items.sort((a, b) => a.y - b.y).forEach((it) => it.draw());
