@@ -327,6 +327,13 @@
     topaz: { name: '토파즈', sell: 800, icon: 'gem-yellow' },
   };
 
+  // 버섯: 섬 곳곳에 매일 돋아나고, 따서 판다 (m: 나오는 달)
+  const MUSH = {
+    shiitake: { name: '표고버섯', r: 1, sell: 40, m: null }, oyster: { name: '느타리버섯', r: 1, sell: 30, m: null },
+    enoki: { name: '팽이버섯', r: 1, sell: 25, m: null }, button: { name: '양송이버섯', r: 1, sell: 35, m: null },
+    king: { name: '새송이버섯', r: 2, sell: 70, m: null }, chanterelle: { name: '꾀꼬리버섯', r: 3, sell: 250, m: [[6, 9]] },
+    matsutake: { name: '송이버섯', r: 4, sell: 900, m: [[9, 10]] }, rainbow: { name: '무지개버섯', r: 5, sell: 2500, m: null },
+  };
   const LIST = { fish: FISH, bug: BUGS, fossil: FOSSILS };
   const BY_ID = {}; for (const c of Object.keys(LIST)) for (const s of LIST[c]) BY_ID[s.id] = s;
   const CAT_NAME = { fish: '물고기', bug: '곤충', fossil: '화석' };
@@ -353,5 +360,5 @@
   const hoursText = (sp) => !sp.h ? '하루 종일' : `${sp.h[0]}시~${sp.h[1] === 24 ? 24 : sp.h[1]}시`;
   const LOC_NAME = { pond: '연못', sea: '바다', flower: '꽃밭', meadow: '풀밭', ground: '땅 위', water: '물가', tree: '나무', forest: '숲', dig: '빛나는 땅' };
 
-  G.Data = { FISH, BUGS, FOSSILS, ORES, LIST, BY_ID, CAT_NAME, LOC_NAME, available, pick, fishPool, bugPool, monthsText, hoursText, RARITY_W };
+  G.Data = { FISH, BUGS, FOSSILS, ORES, MUSH, LIST, BY_ID, CAT_NAME, LOC_NAME, available, pick, fishPool, bugPool, monthsText, hoursText, RARITY_W };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -401,7 +401,7 @@
       fruit: {},
       maxHpBonus: 0,
       dex: { fruit: {}, fish: {}, bug: {}, fossil: {} },
-      bag: { fish: {}, bug: {}, fossil: {}, ore: {} },
+      bag: { fish: {}, bug: {}, fossil: {}, ore: {}, mush: {} },
       dug: {},
       stars: 1,
       pos: null,
@@ -523,6 +523,17 @@
     if (cast.lucky) return { type: 'lucky', ...lucky(S) };
     return { type: 'catch', sp: cast.sp, ...addCatch(S, cast.sp, date) };
   }
+  // 버섯 따기: HP 없이, 하루에 그 자리 한 번
+  function pickMush(S, date, spotKey, when = new Date(), rng = Math.random) {
+    const I = S.island; I.picked = I.picked || {}; I.picked[date] = I.picked[date] || [];
+    if (I.picked[date].includes(spotKey)) return { err: '이미 땄어요' };
+    I.picked[date].push(spotKey);
+    for (const k of Object.keys(I.picked)) if (k < addDays(date, -3)) delete I.picked[k];
+    const pool = Object.entries(D().MUSH).filter(([, m]) => D().available({ m: m.m, h: null }, when)).map(([id, m]) => ({ id, ...m }));
+    const m = D().pick(pool, rng, luckBonus(S));
+    I.bag.mush = I.bag.mush || {}; I.bag.mush[m.id] = (I.bag.mush[m.id] || 0) + 1;
+    return { ok: true, id: m.id, m };
+  }
   // 곤충: 다가갈 때 도망칠 확률은 희귀할수록 높고, 휘두를 때 HP를 쓴다.
   const NET_HIT = [0, 0.9, 0.8, 0.65, 0.5, 0.4];
   const FLEE = [0, 0.02, 0.04, 0.07, 0.1, 0.13]; // 다가가는 동안 0.25초마다
@@ -536,7 +547,7 @@
   const fleeChance = (S, r) => FLEE[r] * [1, 1, 0.8, 0.6][tier(S, 'net')];
   function sellItem(S, cat, id, n = 1) {
     const bag = S.island.bag[cat]; n = Math.min(n, bag[id] || 0); if (n <= 0) return { err: '없어요' };
-    const price = cat === 'ore' ? D().ORES[id].sell : D().BY_ID[id].sell;
+    const price = cat === 'ore' ? D().ORES[id].sell : cat === 'mush' ? D().MUSH[id].sell : D().BY_ID[id].sell;
     bag[id] -= n; if (!bag[id]) delete bag[id];
     S.player.coins += price * n; return { ok: true, coins: price * n };
   }
@@ -668,7 +679,7 @@
     R, maxHp, MISS_HP, CHURCH_HP, BASE_MAX_HP,
     TOOLS, TIER_NAME, TOOL_PRICE, TOOL_INFO, tier, cost, buyTool, waterAll, fleeChance, TOPS, BOTTOMS, HATS, CLOTHES, wardrobe, owns, wear, shopToday, buySeed, buyClothes,
     addLitter, clearLitter, cleanDays, VILLAGERS, V_BY, villagersHere, villagerHelp, talk, FRIEND_GIFT, checkArrivals, extraDigSpots,
-    addCatch, lucky, dig, digResult, castLine, landFish, swingNet, FLEE, NET_HIT, sellItem, eatFish, dexCount, STAR_RULES, computeStars, checkStars,
+    addCatch, lucky, dig, pickMush, digResult, castLine, landFish, swingNet, FLEE, NET_HIT, sellItem, eatFish, dexCount, STAR_RULES, computeStars, checkStars,
     FRUITS, COST, PLOTS, GROW_DAYS, defaultIsland, treeStage, plant, water, harvest, growTrees, eat, sell, heal,
     SUBJECTS, SUBJECT_BY_WD, questsFor, isComplete, defaultState, dayRec, qRec,
     reward, damage, checkAllClear, settle, makeupList, completeMakeup,

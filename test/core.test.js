@@ -243,5 +243,12 @@ t('주민: 연속 공부·도감·떠돌이 손님 경로', () => {
   assert.ok(!C.villagersHere(S).some((v) => v.id === id));
   const r = C.talk(S, id, '2026-12-03'); assert.ok(r.moved); assert.ok(C.villagersHere(S).some((v) => v.id === id)); assert.strictEqual(S.island.visitor, null);
 });
+t('버섯: 하루에 그 자리 한 번, 가방에 들어가고 팔 수 있음', () => {
+  const S = C.defaultState(), when = new Date(2026, 9, 1);
+  const r = C.pickMush(S, '2026-10-01', '3,4', when, () => 0.01); assert.ok(r.ok);
+  assert.ok(C.pickMush(S, '2026-10-01', '3,4', when).err);
+  const c0 = S.player.coins; assert.ok(C.sellItem(S, 'mush', r.id).ok); assert.strictEqual(S.player.coins, c0 + D.MUSH[r.id].sell);
+  assert.ok(!Object.values(Array.from({ length: 200 }, () => C.pickMush(S, 'x' + Math.random(), 'k', new Date(2026, 1, 1)))).some((x) => x.id === 'matsutake'));
+});
 console.log(fails ? `\n${fails}개 실패` : '\n전부 통과');
 process.exit(fails ? 1 : 0);

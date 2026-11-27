@@ -201,15 +201,15 @@
       const have = Object.entries(I.bag[cat] || {}).filter(([, n]) => n > 0);
       if (!have.length) return '';
       return `<div class="card"><h3>${title}</h3><div class="grid">${have.map(([id, n]) => {
-        const sp = cat === 'ore' ? D.ORES[id] : D.BY_ID[id];
-        const img = cat === 'ore' ? `assets/${sp.icon}.png` : iconOf(sp);
+        const sp = cat === 'ore' ? D.ORES[id] : cat === 'mush' ? D.MUSH[id] : D.BY_ID[id];
+        const img = cat === 'ore' ? `assets/${sp.icon}.png` : cat === 'mush' ? `assets/a/mush_${id}.png` : iconOf(sp);
         return `<div class="slot ${cat !== 'ore' ? 'r' + sp.r : ''}"><img src="${img}" class="px icon"><b class="cnt">${n}</b><div class="slot-name">${esc(sp.name)}</div>
           <div class="slot-btns">${eat ? `<button class="btn xs" data-act="eatFish" data-id="${id}">먹기 +${sp.hp}❤️</button>` : ''}
           <button class="btn xs gold" data-act="sellItem" data-cat="${cat}" data-id="${id}">팔기 ${sp.sell}</button></div></div>`;
       }).join('')}</div><button class="btn wide gold" data-act="sellCat" data-cat="${cat}">전부 팔기</button></div>`;
     };
-    html += sec('🐟 물고기', 'fish', D.FISH, true) + sec('🦋 곤충', 'bug', D.BUGS) + sec('🦴 화석', 'fossil', D.FOSSILS) + sec('💎 광물', 'ore');
-    if (!['fish', 'bug', 'fossil', 'ore'].some((c) => Object.keys(I.bag[c] || {}).length)) html += `<div class="card"><p class="muted">연못에서 낚시, 꽃밭에서 곤충 잡기, 반짝이는 땅 파기로 채워 보세요!</p></div>`;
+    html += sec('🐟 물고기', 'fish', D.FISH, true) + sec('🦋 곤충', 'bug', D.BUGS) + sec('🦴 화석', 'fossil', D.FOSSILS) + sec('🍄 버섯', 'mush') + sec('💎 광물', 'ore');
+    if (!['fish', 'bug', 'fossil', 'ore', 'mush'].some((c) => Object.keys(I.bag[c] || {}).length)) html += `<div class="card"><p class="muted">연못에서 낚시, 꽃밭에서 곤충 잡기, 반짝이는 땅 파기로 채워 보세요!</p></div>`;
     return html;
   }
 
@@ -781,6 +781,13 @@
   const islandHooks = {
     state: () => S, today, save, onTap: onIslandTap, toast,
     isDug: (k) => (S.island.dug[today()] || []).includes(k),
+    isPicked: (k) => ((S.island.picked || {})[today()] || []).includes(k),
+    pickMush: (k, x, y) => {
+      const r = C.pickMush(S, today(), k); if (r.err) return;
+      save(); renderHud();
+      if (r.m.r >= 3) showCard(`<div class="rays r${r.m.r}"><img class="px big-icon" src="assets/a/mush_${r.id}.png"></div><div class="stars">${STARS(r.m.r)}</div><h2>${r.m.name}${eul(r.m.name)} 땄다!</h2><p class="muted">팔면 ${COIN}${r.m.sell}</p>`, `rare${r.m.r}`);
+      else window.Island.floatText(`🍄 ${r.m.name} +1`, '#ffe0f0', [x, y - 10]);
+    },
     tryFish: (loc, start) => { const c = C.cost(S, 'fish'); if (S.player.hp < c) return toast(`HP가 부족해요 (필요 ${c}). 공부하면 HP가 들어와요!`); start(); },
     cast: (loc) => {
       const c = C.cost(S, 'fish'), r = C.castLine(S, loc, new Date());

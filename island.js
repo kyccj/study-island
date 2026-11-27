@@ -221,7 +221,7 @@
   }
 
   let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const DECO_KINDS = ['flower_pink', 'flower_yellow', 'flower_white', 'flower_lilac', 'tuft', 'tuft', 'tuft', 'bush', 'mushroom', 'stone'];
+  const DECO_KINDS = ['flower_pink', 'flower_yellow', 'flower_white', 'flower_lilac', 'tuft', 'tuft', 'tuft', 'bush', 'stone']; // 버섯은 딸 수 있는 것만 따로
   const deco = [];
 
   // ───────── 걸을 수 있는 칸 ─────────
@@ -339,6 +339,22 @@
     return spots;
   }
 
+  // ───────── 오늘의 버섯 자리(가을엔 더 많이) ─────────
+  let mushDate = null, mushes = [];
+  function mushSpots(date) {
+    if (mushDate === date + stars) return mushes;
+    let h = 99; for (const ch of date) h = (h * 37 + ch.charCodeAt(0)) % 2147483647;
+    let s = h || 1; const r = () => ((s = (s * 48271) % 2147483647) / 2147483647);
+    const mo = +date.slice(5, 7), n = 3 + (mo >= 9 && mo <= 11 ? 2 : 0);
+    const dig = new Set(digSpots(date).map(([x, y]) => key(x, y))), cand = [];
+    for (let y = 7; y <= 27; y++) for (let x = 2; x <= 21; x++) {
+      if (!walkable(x, y) || dig.has(key(x, y)) || deco.some((d) => d.x === x && d.y === y) || PLOTS.some(([px, py]) => Math.abs(px - x) <= 1 && Math.abs(py - y) <= 1)) continue;
+      cand.push([x, y]);
+    }
+    mushes = []; while (mushes.length < n && cand.length) mushes.push(cand.splice(Math.floor(r() * cand.length), 1)[0]);
+    mushDate = date + stars; return mushes;
+  }
+
   // ───────── 곤충 ─────────
   const FLY = new Set(['butterfly', 'moth', 'dragon', 'bee', 'firefly']);
   const STILL = new Set(['cicada', 'rhino', 'stag', 'beetle', 'lady']);
@@ -439,6 +455,7 @@
     const tx = Math.floor(wx / T), ty = Math.floor(wy / T);
     for (const b of bugs) if (!b.gone && Math.hypot(b.x - wx, b.y - wy) < 11) return { type: 'bug', bug: b };
     for (const v of vill) if (Math.abs(v.x - wx) < 8 && wy < v.y + 2 && wy > v.y - 24) return { type: 'villager', v };
+    for (const [x, y] of mushSpots(hooks.today())) if (tx === x && ty === y && !hooks.isPicked(key(x, y))) return { type: 'mush', x, y };
     const lit = hooks.state().island.litter || [];
     for (let i = 0; i < lit.length; i++) if (lit[i].x === tx && lit[i].y === ty) return { type: 'litter', idx: i, x: tx, y: ty };
     for (const [x, y] of digSpots(hooks.today())) if (tx === x && ty === y && !hooks.isDug(key(x, y))) return { type: 'dig', x, y };
@@ -495,6 +512,12 @@
       const vt = [Math.round((v.x - 8) / T), Math.round((v.y - 14) / T)], st = besideTile(vt[0], vt[1]) || vt;
       addRing(v.x, v.y - 4, '#ffd6f0');
       walkThen(st, () => { faceTo(v.x, v.y - 6); v.dir = P.y + 8 > v.y - 6 ? 0 : 1; v.talk = 4; hooks.onTap({ type: 'villager', id: v.id }); });
+      return;
+    }
+    if (obj && obj.type === 'mush') {
+      const st = besideTile(obj.x, obj.y) || [obj.x, obj.y];
+      addRing(obj.x * T + 8, obj.y * T + 10, '#ffe0f0');
+      walkThen(st, () => { faceTo(obj.x * T + 8, obj.y * T + 8); P.act = 0.3; P.actKind = 2; sparkle(obj.x * T + 8, obj.y * T + 8, 8); hooks.pickMush(key(obj.x, obj.y), obj.x * T + 8, obj.y * T + 8); });
       return;
     }
     if (obj && obj.type === 'litter') {
@@ -669,6 +692,7 @@
     for (const [x, y] of [[16.3, 6.4], [19.2, 4.6], [17.6, 8.3]]) spr('lily', x * T, y * T + Math.sin(time + x) * 0.4);
     deco.forEach((d) => items.push({ y: d.y * T + 12, draw: () => spr(d.k, d.x * T + 8, d.y * T + 14) }));
     vill.forEach((v) => items.push({ y: v.y, draw: () => drawVillager(v, time, S) }));
+    for (const [x, y] of mushSpots(today)) if (!hooks.isPicked(key(x, y))) items.push({ y: y * T + 12, draw: () => { spr('mushroom', x * T + 8, y * T + 14 + Math.sin(time * 2 + x) * 0.3); if (Math.floor(time * 2 + y) % 4 === 0) { ctx.fillStyle = '#fff'; ctx.fillRect(x * T + 12, y * T + 4, 1, 3); ctx.fillRect(x * T + 11, y * T + 5, 3, 1); } } });
     (S.island.litter || []).forEach((l) => items.push({ y: l.y * T + 12, draw: () => spr(l.k === 'can' ? 'can' : 'weeds', l.x * T + 8, l.y * T + 14) }));
     BEACH_DECO.forEach(([x, y, k]) => items.push({ y: y * T + 10, draw: () => spr(k, x * T + 8, y * T + 12) }));
     PALMS.forEach(([x, y], k) => items.push({ y: y * T + 14, draw: () => spr('palm', x * T + 8 + Math.sin(time * 1.1 + k) * 0.4, y * T + 15) }));
@@ -731,5 +755,5 @@
   function stop() { running = false; fishing = null; }
 
   G.Island = { init, start, stop, tapWorld, redress, syncVillagers, zoomStep, ZOOMS, floatText, splash, pop, dust, sparkle, resize, PLOTS, IMG, ready, player: P,
-    _debug: { vill: () => vill, bugs: () => bugs, fishing: () => fishing, spots: () => spots, spawn: (sp, x, y) => bugs.push({ sp, x, y, hx: x, hy: y, ph: 0, mode: FLY.has(sp.art[0]) ? 'fly' : STILL.has(sp.art[0]) ? 'still' : 'crawl', gone: false, t: 0 }) } };
+    _debug: { mush: () => mushSpots(hooks.today()), vill: () => vill, bugs: () => bugs, fishing: () => fishing, spots: () => spots, spawn: (sp, x, y) => bugs.push({ sp, x, y, hx: x, hy: y, ph: 0, mode: FLY.has(sp.art[0]) ? 'fly' : STILL.has(sp.art[0]) ? 'still' : 'crawl', gone: false, t: 0 }) } };
 })(window);
